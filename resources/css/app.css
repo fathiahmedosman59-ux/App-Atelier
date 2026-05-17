@@ -1,0 +1,132 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* ── Couleurs STCD Motors (remplace orange) ── */
+    --color-orange-50:  #f3f0ff;
+    --color-orange-100: #e5dcff;
+    --color-orange-200: #ccbbff;
+    --color-orange-300: #aa8df5;
+    --color-orange-400: #8a66d9;
+    --color-orange-500: #5B3FAF;
+    --color-orange-600: #4a329a;
+    --color-orange-700: #3a2680;
+    --color-orange-800: #2b1c65;
+    --color-orange-900: #1c1248;
+    --color-orange-950: #110a30;
+}
+
+/* ── Mode nuit / Mode clair ───────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html.dark { color-scheme: dark; }
+
+/* Backgrounds */
+html.dark .bg-white        { background-color: #1e293b; }
+html.dark .bg-gray-50      { background-color: #0f172a; }
+html.dark .bg-gray-100     { background-color: #1e293b; }
+
+/* Textes */
+html.dark .text-slate-800  { color: #f1f5f9; }
+html.dark .text-slate-700  { color: #e2e8f0; }
+html.dark .text-slate-600  { color: #cbd5e1; }
+html.dark .text-slate-500  { color: #94a3b8; }
+html.dark .text-gray-700   { color: #e2e8f0; }
+html.dark .text-gray-600   { color: #94a3b8; }
+html.dark .text-slate-800  { color: #f1f5f9; }
+
+/* Bordures */
+html.dark .border-gray-200 { border-color: #334155; }
+html.dark .border-gray-300 { border-color: #475569; }
+html.dark .border-gray-100 { border-color: #1e293b; }
+html.dark .border-e-gray-200 { border-color: #334155; }
+
+/* Séparateurs table */
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
+html.dark .divide-y        > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+
+/* Hover lignes tableau */
+html.dark .hover\:bg-gray-50:hover { background-color: #162032; }
+html.dark .hover\:bg-slate-800:hover { background-color: #0f172a; }
+
+/* Champs de saisie */
+html.dark input:not([type=checkbox]):not([type=radio]),
+html.dark select,
+html.dark textarea {
+    background-color: #0f172a;
+    border-color: #475569;
+    color: #f1f5f9;
+    color-scheme: dark;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #64748b; }
+
+/* Alertes */
+html.dark .bg-green-50     { background-color: #052e16; }
+html.dark .bg-red-50       { background-color: #450a0a; }
+html.dark .bg-yellow-50    { background-color: #422006; }
+html.dark .bg-orange-50    { background-color: #431407; }
+html.dark .bg-blue-50      { background-color: #172554; }
+html.dark .bg-fffbeb,
+html.dark .bg-\[#fffbeb\]  { background-color: #422006; }
+
+html.dark .border-green-200 { border-color: #166534; }
+html.dark .border-red-200   { border-color: #991b1b; }
+html.dark .border-orange-200 { border-color: #92400e; }
+html.dark .border-blue-200  { border-color: #1e40af; }
+
+html.dark .text-green-800  { color: #86efac; }
+html.dark .text-green-700  { color: #4ade80; }
+html.dark .text-green-600  { color: #34d399; }
+html.dark .text-green-500  { color: #6ee7b7; }
+html.dark .text-red-700    { color: #f87171; }
+html.dark .text-red-500    { color: #fca5a5; }
+html.dark .text-blue-700   { color: #93c5fd; }
+html.dark .text-blue-600   { color: #60a5fa; }
+html.dark .text-blue-500   { color: #93c5fd; }
+html.dark .text-slate-900  { color: #f8fafc; }
+html.dark .text-slate-400  { color: #64748b; }
+html.dark .text-orange-500 { color: #a78bfa; }
+html.dark .text-orange-600 { color: #8b5cf6; }
+html.dark .text-orange-400 { color: #c4b5fd; }
+
+/* Fonds colorés badges / progress bars */
+html.dark .bg-green-100    { background-color: #064e3b; }
+html.dark .bg-blue-100     { background-color: #1e3a5f; }
+html.dark .bg-amber-50     { background-color: #422006; }
+html.dark .bg-amber-100    { background-color: #78350f; }
+html.dark .bg-slate-100    { background-color: #1e293b; }
+html.dark .bg-slate-800    { background-color: #0f172a; }
+
+/* Bordures colorées supplémentaires */
+html.dark .border-green-300 { border-color: #166534; }
+html.dark .border-blue-300  { border-color: #1e40af; }
+html.dark .border-amber-200 { border-color: #78350f; }
+
+/* Textes couleurs supplémentaires */
+html.dark .text-amber-700  { color: #fcd34d; }
+html.dark .text-amber-600  { color: #fbbf24; }
+html.dark .text-yellow-600 { color: #fde68a; }
+html.dark .text-green-600.font-medium { color: #34d399; }
+
+/* Badges de statut neutres */
+html.dark .bg-gray-100.text-gray-600 { background-color: #334155; color: #94a3b8; }
+
+/* Fond fffbeb (note compte) */
+html.dark [style*="background:#fffbeb"],
+html.dark [style*="background: #fffbeb"] { background-color: #422006 !important; }
+
+/* Bouton file input */
+html.dark .file\:bg-orange-50  { --tw-file-bg: #431407; }
+
+/* Pagination */
+html.dark nav[aria-label] span,
+html.dark nav[aria-label] a  { background-color: #1e293b; border-color: #334155; color: #e2e8f0; }
+html.dark nav[aria-label] a:hover { background-color: #334155; }
