@@ -43,19 +43,16 @@
         <h3 class="font-semibold text-slate-800 mb-4">Informations</h3>
         <div class="grid grid-cols-2 gap-4">
 
-            {{-- Champs particulier --}}
-            <div class="field-particulier field-assurance">
+            {{-- Nom complet (particulier & assurance) --}}
+            <div class="field-particulier field-assurance col-span-2">
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">
-                    Nom <span class="text-red-500">*</span>
+                    Nom complet <span class="text-red-500">*</span>
                 </label>
-                <input type="text" name="nom" value="{{ old('nom', $client?->nom) }}"
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 @error('nom') border-red-400 @enderror">
-            </div>
-
-            <div class="field-particulier">
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">Prénom</label>
-                <input type="text" name="prenom" value="{{ old('prenom', $client?->prenom) }}"
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <input type="text" name="nom"
+                       value="{{ old('nom', $client?->type === 'particulier' ? $client->nom_complet : $client?->nom) }}"
+                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 @error('nom') border-red-400 @enderror"
+                       placeholder="Ex : Ibrahim Moumine">
+                <input type="hidden" name="prenom" value="">
             </div>
 
             {{-- Champs société/assurance --}}
@@ -164,9 +161,9 @@
                 <p class="text-xs text-slate-500 mt-1">
                     Solde utilisé actuel :
                     <span class="font-semibold {{ $client->solde_compte >= $client->plafond_compte ? 'text-red-600' : 'text-slate-700' }}">
-                        {{ number_format($client->solde_compte, 2, ',', ' ') }} FDJ
+                        {{ number_format($client->solde_compte, 0, ',', ' ') }} FDJ
                     </span>
-                    / {{ number_format($client->plafond_compte, 2, ',', ' ') }} FDJ
+                    / {{ number_format($client->plafond_compte, 0, ',', ' ') }} FDJ
                 </p>
                 @endif
             </div>

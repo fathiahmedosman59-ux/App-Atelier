@@ -165,12 +165,12 @@
                 <td>{{ $ligne->designation }}</td>
                 <td class="ref-cell">{{ $ligne->reference ?: '—' }}</td>
                 <td class="r">
-                    {{ number_format($ligne->quantite, 2, ',', ' ') }}
+                    {{ number_format($ligne->quantite, 0, ',', ' ') }}
                     @if($ligne->type === 'main_oeuvre')<span style="color:#1d4ed8;font-size:8pt;"> h</span>@endif
                 </td>
-                <td class="r">{{ number_format($ligne->prix_unitaire, 2, ',', ' ') }} FDJ</td>
+                <td class="r">{{ number_format($ligne->prix_unitaire, 0, ',', ' ') }} FDJ</td>
                 <td class="r">{{ $ligne->remise > 0 ? $ligne->remise . '%' : '—' }}</td>
-                <td class="r" style="font-weight:700;">{{ number_format($ligne->total_ht, 2, ',', ' ') }} FDJ</td>
+                <td class="r" style="font-weight:700;">{{ number_format($ligne->total_ht, 0, ',', ' ') }} FDJ</td>
             </tr>
             @endforeach
         </tbody>
@@ -181,15 +181,15 @@
         <div class="totaux-box">
             <div class="totaux-row">
                 <span>Total HT</span>
-                <span>{{ number_format($devis->montant_ht, 2, ',', ' ') }} FDJ</span>
+                <span>{{ number_format($devis->montant_ht, 0, ',', ' ') }} FDJ</span>
             </div>
             <div class="totaux-row">
                 <span>TVA ({{ $devis->taux_tva }}%)</span>
-                <span>{{ number_format($devis->montant_tva, 2, ',', ' ') }} FDJ</span>
+                <span>{{ number_format($devis->montant_tva, 0, ',', ' ') }} FDJ</span>
             </div>
             <div class="totaux-row ttc">
                 <span>Total TTC</span>
-                <span>{{ number_format($devis->montant_ttc, 2, ',', ' ') }} FDJ</span>
+                <span>{{ number_format($devis->montant_ttc, 0, ',', ' ') }} FDJ</span>
             </div>
         </div>
     </div>

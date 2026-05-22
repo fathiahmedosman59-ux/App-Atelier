@@ -104,6 +104,9 @@ Route::middleware('auth')->group(function () {
     Route::middleware('perm:gerer_devis')->group(function () {
         Route::get('/ordres-reparations/{ordresReparation}/devis/creer',  [DevisController::class, 'create'])->name('devis.create');
         Route::post('/ordres-reparations/{ordresReparation}/devis',       [DevisController::class, 'store'])->name('devis.store');
+        Route::get('/devis/{devis}/modifier',                             [DevisController::class, 'edit'])->name('devis.edit');
+        Route::put('/devis/{devis}',                                      [DevisController::class, 'update'])->name('devis.update');
+        Route::delete('/devis/{devis}',                                   [DevisController::class, 'destroy'])->name('devis.destroy');
         Route::patch('/devis/{devis}/envoyer',                            [DevisController::class, 'marquerEnvoye'])->name('devis.envoyer');
         Route::patch('/devis/{devis}/accepter',                           [DevisController::class, 'accepter'])->name('devis.accepter');
         Route::patch('/devis/{devis}/refuser',                            [DevisController::class, 'refuser'])->name('devis.refuser');

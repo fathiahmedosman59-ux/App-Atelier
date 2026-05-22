@@ -86,7 +86,6 @@ class FactureController extends Controller
         $isSociete = in_array($ordresReparation->client->type, ['societe', 'assurance']);
 
         $request->validate([
-            'mode_paiement'          => ['required', 'in:especes,cheque,carte,virement,compte'],
             'taux_tva'               => ['required', 'numeric', 'min:0', 'max:100'],
             'frais_timbre'           => ['nullable', 'numeric', 'min:0'],
             'date_echeance'          => ['nullable', 'date'],
@@ -121,12 +120,12 @@ class FactureController extends Controller
             'lignes.*.remise.max'          => 'La remise ne peut pas dépasser 100%.',
         ]);
 
-        // Pour le paiement sur compte société : on bloque si le plafond de crédit est atteint
-        if ($request->mode_paiement === 'compte') {
-            $client = $ordresReparation->client;
-            if ($client->compte_actif && ! $client->peutFacturerSurCompte()) {
-                return back()->withErrors(['mode_paiement' => "Le plafond du compte crédit de {$client->nom_complet} est atteint ({$client->plafond_compte} DA). Impossible de facturer sur ce compte."])->withInput();
-            }
+        // Bloquer si le client a un compte crédit mais a dépassé son plafond
+        $client = $ordresReparation->client;
+        if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte()) {
+            $plafond = number_format($client->plafond_compte, 0, ',', ' ');
+            $solde   = number_format($client->solde_compte,   0, ',', ' ');
+            return back()->with('error', "Impossible de créer la facture : le plafond de compte crédit de {$client->nom_complet} est atteint ({$solde} FDJ utilisés sur {$plafond} FDJ autorisés). Veuillez encaisser les factures en attente avant de continuer.");
         }
 
         // Transaction : si une étape échoue, tout est annulé (aucune donnée partielle en base)
@@ -151,29 +150,31 @@ class FactureController extends Controller
                 ];
             }
 
-            $tva      = round($montantHt * $request->taux_tva / 100, 2);
-            $ttc      = $montantHt + $tva;
-            $modePaie = $request->mode_paiement;
-            $isSociete = $modePaie === 'compte';
+            $tva    = round($montantHt * $request->taux_tva / 100, 2);
+            $ttc    = $montantHt + $tva;
+            $client = $ordresReparation->client;
 
-            // Création de la facture principale
+            // Création de la facture principale (toujours en statut "émise" — non payée)
             $facture = Facture::create([
-                'numero'         => Facture::genererNumero(),
-                'or_id'          => $ordresReparation->id,
-                'devis_id'       => null,
-                'client_id'      => $ordresReparation->client_id,
-                'statut'         => 'emise',
-                'mode_paiement'  => $modePaie,
-                'date_emission'  => now(),
-                'date_echeance'  => $isSociete ? $request->date_echeance : null,
-                'notes'          => $request->notes,
-                'frais_timbre'   => $request->frais_timbre ?? 0,
-                'montant_ht'     => $montantHt,
-                'taux_tva'       => $request->taux_tva,
-                'montant_tva'    => $tva,
-                'montant_ttc'    => $ttc,
-                'montant_paye'   => 0,
-                'date_paiement'  => null,
+                'numero'             => Facture::genererNumero(),
+                'or_id'              => $ordresReparation->id,
+                'devis_id'           => null,
+                'client_id'          => $ordresReparation->client_id,
+                'statut'             => 'emise',
+                'mode_paiement'      => null,
+                'date_emission'      => now(),
+                'notes'              => $request->notes,
+                'frais_timbre'       => $request->frais_timbre ?? 0,
+                'montant_ht'         => $montantHt,
+                'taux_tva'           => $request->taux_tva,
+                'montant_tva'        => $tva,
+                'montant_ttc'        => $ttc,
+                'montant_paye'       => 0,
+                'date_paiement'      => null,
+                // Le crédit n'est jamais accordé automatiquement — c'est le caissier qui clique "Mettre sur le compte client"
+                'credit_accorde'     => false,
+                'credit_accorde_at'  => null,
+                'credit_accorde_par' => null,
             ]);
 
             // Création des lignes de détail de la facture
@@ -228,13 +229,15 @@ class FactureController extends Controller
         $request->validate([
             'montant_paye'   => ['required', 'numeric', 'min:0'],
             'date_paiement'  => ['required', 'date'],
-            'mode_paiement'  => ['nullable', 'in:especes,cheque,carte,virement,compte'],
+            'mode_paiement'  => ['required', 'in:especes,cheque,waafi,cac,carte,virement'],
         ], [
             'montant_paye.required'  => 'Le montant payé est obligatoire.',
             'montant_paye.numeric'   => 'Le montant payé doit être un nombre.',
-            'montant_paye.min'       => 'Le montant payé ne peut pas être négatif.',
-            'date_paiement.required' => 'La date de paiement est obligatoire.',
-            'date_paiement.date'     => 'La date de paiement n\'est pas valide.',
+            'montant_paye.min'        => 'Le montant payé ne peut pas être négatif.',
+            'date_paiement.required'  => 'La date de paiement est obligatoire.',
+            'date_paiement.date'      => 'La date de paiement n\'est pas valide.',
+            'mode_paiement.required'  => 'Veuillez sélectionner le mode de paiement.',
+            'mode_paiement.in'        => 'Mode de paiement invalide.',
         ]);
 
         $facture->update([
@@ -257,6 +260,15 @@ class FactureController extends Controller
     public function accorderCredit(Request $request, Facture $facture)
     {
         if (! auth()->user()->isCaissier() && ! auth()->user()->isAdmin()) abort(403);
+
+        $client         = $facture->client;
+        $montantRestant = $facture->getMontantRestant();
+        if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte($montantRestant)) {
+            $plafond   = number_format($client->plafond_compte, 0, ',', ' ');
+            $solde     = number_format($client->solde_compte,   0, ',', ' ');
+            $montant   = number_format($montantRestant,         0, ',', ' ');
+            return back()->with('error', "Impossible de mettre sur le compte : cette facture ({$montant} FDJ) dépasserait le plafond de {$client->nom_complet} (solde actuel {$solde} FDJ / plafond {$plafond} FDJ).");
+        }
 
         $facture->update([
             'credit_accorde'     => true,

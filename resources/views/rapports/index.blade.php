@@ -120,17 +120,18 @@
 
     {{-- Évolution CA sur 12 mois --}}
     <div class="mt-5">
-        <p class="text-xs font-semibold text-green-700 uppercase tracking-wider mb-3">Évolution du CA encaissé — 12 mois</p>
-        @php $maxCADisplay = max(array_column($evolutionCA, 'ca') ?: [1]); @endphp
-        <div class="flex items-end gap-1.5 h-24">
+        <p class="text-xs font-semibold text-green-700 uppercase tracking-wider mb-3">Évolution du CA encaissé — {{ now()->year }}</p>
+        @php $maxCADisplay = max(array_column($evolutionCA, 'ca') ?: [1]); $barMax = 80; @endphp
+        <div class="flex items-end gap-1.5" style="height:96px">
             @foreach($evolutionCA as $mois)
-            @php $pct = $maxCADisplay > 0 ? max(3, round($mois['ca'] / $maxCADisplay * 100)) : 3; @endphp
-            <div class="flex-1 flex flex-col items-center gap-1 group relative">
-                <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+            @php $barPx = $maxCADisplay > 0 ? max(2, (int)round($mois['ca'] / $maxCADisplay * $barMax)) : 2; @endphp
+            <div class="flex-1 flex flex-col items-center group relative">
+                <div class="absolute left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none"
+                     style="bottom: calc({{ $barPx }}px + 18px)">
                     {{ number_format($mois['ca'], 0, ',', ' ') }} FDJ
                 </div>
-                <div class="w-full rounded-t-md transition-all cursor-default"
-                     style="height: {{ $pct }}%; background-color: {{ $mois['ca'] > 0 ? '#10b981' : '#d1fae5' }}">
+                <div class="w-full rounded-t-sm transition-all cursor-default"
+                     style="height:{{ $barPx }}px; background-color:{{ $mois['ca'] > 0 ? '#10b981' : '#d1fae5' }}">
                 </div>
                 <span class="text-slate-500 whitespace-nowrap" style="font-size:9px">{{ substr($mois['label'], 0, 3) }}</span>
             </div>
@@ -144,17 +145,18 @@
 
     {{-- ── Évolution mensuelle ──────────────────────────── --}}
     <div class="col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
-        <h3 class="text-sm font-bold text-slate-700 mb-5 uppercase tracking-wider">Évolution sur 12 mois</h3>
-        <div class="flex items-end gap-2 h-40">
+        <h3 class="text-sm font-bold text-slate-700 mb-5 uppercase tracking-wider">Évolution des OR — {{ now()->year }}</h3>
+        @php $evoMax = 120; @endphp
+        <div class="flex items-end gap-2" style="height:160px">
             @foreach($evolution as $mois)
-            @php $pct = $maxEvo > 0 ? max(4, round($mois['count'] / $maxEvo * 100)) : 4; @endphp
-            <div class="flex-1 flex flex-col items-center gap-1 group">
-                <span class="text-xs font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">{{ $mois['count'] }}</span>
-                <div class="w-full bg-orange-100 rounded-t-lg transition-all hover:bg-orange-500 cursor-default relative"
-                     style="height: {{ $pct }}%" title="{{ $mois['label'] }} : {{ $mois['count'] }} ORs">
-                    <div class="absolute inset-0 bg-orange-400 rounded-t-lg opacity-80"></div>
+            @php $barPx = $maxEvo > 0 ? max(3, (int)round($mois['count'] / $maxEvo * $evoMax)) : 3; @endphp
+            <div class="flex-1 flex flex-col items-center group relative">
+                <span class="text-xs font-bold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity absolute"
+                      style="bottom: calc({{ $barPx }}px + 4px)">{{ $mois['count'] }}</span>
+                <div class="w-full bg-orange-400 rounded-t-lg transition-all hover:bg-orange-500 cursor-default"
+                     style="height:{{ $barPx }}px" title="{{ $mois['label'] }} : {{ $mois['count'] }} ORs">
                 </div>
-                <span class="text-xs text-slate-400 whitespace-nowrap" style="font-size:9px">{{ substr($mois['label'], 0, 3) }}</span>
+                <span class="text-slate-400 whitespace-nowrap mt-1" style="font-size:9px">{{ substr($mois['label'], 0, 3) }}</span>
             </div>
             @endforeach
         </div>

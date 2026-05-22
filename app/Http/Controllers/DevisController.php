@@ -118,6 +118,92 @@ class DevisController extends Controller
     }
 
     /**
+     * Formulaire de modification d'un devis (seulement si brouillon ou envoyé).
+     */
+    public function edit(Devis $devis)
+    {
+        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! in_array($devis->statut, ['brouillon', 'envoye'])) {
+            return back()->with('error', 'Ce devis ne peut plus être modifié.');
+        }
+        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'lignes']);
+        return view('devis.edit', compact('devis'));
+    }
+
+    /**
+     * Enregistre les modifications d'un devis (seulement si brouillon ou envoyé).
+     */
+    public function update(Request $request, Devis $devis)
+    {
+        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! in_array($devis->statut, ['brouillon', 'envoye'])) abort(403);
+
+        $request->validate([
+            'taux_tva'               => ['required', 'numeric', 'min:0', 'max:100'],
+            'notes'                  => ['nullable', 'string'],
+            'lignes'                 => ['required', 'array', 'min:1'],
+            'lignes.*.type'          => ['required', 'in:main_oeuvre,piece'],
+            'lignes.*.designation'   => ['required', 'string'],
+            'lignes.*.reference'     => ['nullable', 'string', 'max:100'],
+            'lignes.*.quantite'      => ['required', 'numeric', 'min:0.01'],
+            'lignes.*.prix_unitaire' => ['required', 'numeric', 'min:0'],
+            'lignes.*.remise'        => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        DB::transaction(function () use ($request, $devis) {
+            $devis->update([
+                'taux_tva' => $request->taux_tva,
+                'notes'    => $request->notes,
+            ]);
+
+            $devis->lignes()->delete();
+
+            foreach ($request->lignes as $ligne) {
+                $remise  = $ligne['remise'] ?? 0;
+                $totalHt = round($ligne['quantite'] * $ligne['prix_unitaire'] * (1 - $remise / 100), 2);
+                LigneDevis::create([
+                    'devis_id'      => $devis->id,
+                    'type'          => $ligne['type'],
+                    'designation'   => $ligne['designation'],
+                    'reference'     => ($ligne['type'] === 'piece') ? ($ligne['reference'] ?? null) : null,
+                    'quantite'      => $ligne['quantite'],
+                    'prix_unitaire' => $ligne['prix_unitaire'],
+                    'remise'        => $remise,
+                    'total_ht'      => $totalHt,
+                ]);
+            }
+
+            $devis->recalculer();
+            Activite::journaliser('modifier_devis', "Devis {$devis->numero} modifié", $devis);
+        });
+
+        return redirect()->route('devis.show', $devis)->with('success', 'Devis mis à jour.');
+    }
+
+    /**
+     * Supprime un devis (seulement si brouillon ou envoyé, jamais si accepté).
+     */
+    public function destroy(Devis $devis)
+    {
+        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! in_array($devis->statut, ['brouillon', 'envoye'])) {
+            return back()->with('error', 'Un devis accepté ne peut pas être supprimé.');
+        }
+
+        $or = $devis->ordreReparation;
+        DB::transaction(function () use ($devis, $or) {
+            Activite::journaliser('supprimer_devis', "Devis {$devis->numero} supprimé", $devis);
+            $devis->lignes()->delete();
+            $devis->delete();
+            if (! $or->allDevis()->exists()) {
+                $or->update(['statut' => 'diagnostic']);
+            }
+        });
+
+        return redirect()->route('ordres-reparations.show', $or)->with('success', 'Devis supprimé.');
+    }
+
+    /**
      * Affiche la fiche détaillée d'un devis avec toutes ses lignes.
      */
     public function show(Devis $devis)

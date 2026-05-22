@@ -47,7 +47,7 @@
                             {{ $eg->factures()->count() }}
                         </span>
                     </td>
-                    <td class="px-5 py-3 text-right font-bold text-slate-800">{{ number_format($eg->montant_total, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right font-bold text-slate-800">{{ number_format($eg->montant_total, 0, ',', ' ') }} FDJ</td>
                     <td class="px-5 py-3">
                         <span class="px-2 py-0.5 rounded-full text-xs font-bold
                             @if($eg->statut === 'paye') bg-green-100 text-green-700

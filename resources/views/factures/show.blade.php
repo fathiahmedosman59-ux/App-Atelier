@@ -37,25 +37,26 @@
             @endif
         </div>
         <div class="text-right">
-            <p class="text-2xl font-bold text-orange-500">{{ number_format($facture->montant_ttc, 2, ',', ' ') }} FDJ</p>
+            <p class="text-2xl font-bold text-orange-500">{{ number_format($facture->montant_ttc, 0, ',', ' ') }} FDJ</p>
             @if($facture->getMontantRestant() > 0)
-            <p class="text-sm text-red-500 font-medium">Reste à payer : {{ number_format($facture->getMontantRestant(), 2, ',', ' ') }} FDJ</p>
+            <p class="text-sm text-red-500 font-medium">Reste à payer : {{ number_format($facture->getMontantRestant(), 0, ',', ' ') }} FDJ</p>
             @else
             <p class="text-sm text-green-600 font-medium">✓ Entièrement payée</p>
             @endif
         </div>
     </div>
 
-    {{-- Formulaire encaissement --}}
-    {{-- Crédit accordé --}}
+    {{-- Crédit accordé ou compte crédit actif --}}
     @if($facture->credit_accorde)
     <div class="mt-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-center justify-between">
         <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span class="text-sm font-semibold text-indigo-800">Crédit accordé</span>
-            <span class="text-xs text-indigo-600">— le {{ $facture->credit_accorde_at?->format('d/m/Y à H:i') }}</span>
+            <div>
+                <span class="text-sm font-semibold text-indigo-800">Facture sur le compte client</span>
+                <span class="text-xs text-indigo-600 ml-1">— accordé le {{ $facture->credit_accorde_at?->format('d/m/Y à H:i') }}</span>
+            </div>
         </div>
         @if(auth()->user()->isCaissier() || auth()->user()->isAdmin())
         <form method="POST" action="{{ route('factures.revoquer-credit', $facture) }}" onsubmit="return confirm('Révoquer le crédit ?')">
@@ -64,34 +65,37 @@
         </form>
         @endif
     </div>
+    @elseif($facture->client->compte_actif && $facture->statut === 'emise')
+    <div class="mt-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 flex items-center gap-2">
+        <svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+        </svg>
+        <p class="text-xs text-slate-500">Ce client a un compte crédit actif — paiement cash ou sur compte selon le choix ci-dessous.</p>
+    </div>
     @endif
 
-    {{-- Formulaire encaissement --}}
-    @if($facture->statut === 'emise' && $facture->getMontantRestant() > 0 && auth()->user()->hasPermission('gerer_factures'))
+    {{-- Paiement encaissé --}}
+    @if($facture->statut === 'emise' && $facture->getMontantRestant() > 0 && !$facture->credit_accorde && auth()->user()->hasPermission('gerer_factures'))
     <div class="mt-4 border-t border-gray-100 pt-4">
-        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Encaisser le paiement</p>
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Paiement encaissé</p>
         <form method="POST" action="{{ route('factures.payer', $facture) }}" class="space-y-3">
             @csrf @method('PATCH')
-
-            {{-- Mode de paiement --}}
             <div>
                 <label class="block text-xs font-medium text-slate-600 mb-2">Mode de paiement</label>
-                <input type="hidden" name="mode_paiement" id="pay_mode_val" value="{{ $facture->mode_paiement }}">
+                <input type="hidden" name="mode_paiement" id="pay_mode_val" value="">
                 <div class="flex flex-wrap gap-2">
-                    @foreach(['especes' => 'Espèces', 'cheque' => 'Chèque', 'carte' => 'Carte', 'virement' => 'Virement', 'compte' => 'Compte société'] as $val => $label)
+                    @foreach(['especes' => 'Espèces', 'cheque' => 'Chèque', 'waafi' => 'Waafi', 'cac' => 'CAC', 'carte' => 'Carte', 'virement' => 'Virement'] as $val => $label)
                     <button type="button" onclick="selectPayMode('{{ $val }}')" data-paymode="{{ $val }}"
-                            class="pay-mode-btn border-2 rounded-xl px-4 py-1.5 text-xs font-bold transition-all
-                                   {{ $facture->mode_paiement === $val ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-slate-600 hover:border-gray-300' }}">
+                            class="pay-mode-btn border-2 rounded-xl px-4 py-1.5 text-xs font-bold transition-all border-gray-200 text-slate-600 hover:border-gray-300">
                         {{ $label }}
                     </button>
                     @endforeach
                 </div>
             </div>
-
             <div class="flex gap-3 items-end flex-wrap">
                 <div>
                     <label class="block text-xs font-medium text-slate-600 mb-1">Montant reçu (FDJ)</label>
-                    <input type="number" name="montant_paye" id="montant_paye_input"
+                    <input type="number" name="montant_paye"
                            value="{{ $facture->totalGeneral() }}" min="0" step="0.01"
                            class="px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 w-48 font-semibold">
                 </div>
@@ -102,7 +106,7 @@
                 </div>
                 <button type="submit"
                         class="bg-green-500 hover:bg-green-600 text-white font-black text-sm px-8 py-2 rounded-xl transition-colors">
-                    ✓ Confirmer — {{ number_format($facture->totalGeneral(), 2, ',', ' ') }} FDJ
+                    ✓ Paiement encaissé — {{ number_format($facture->totalGeneral(), 0, ',', ' ') }} FDJ
                 </button>
             </div>
         </form>
@@ -121,18 +125,17 @@
         </script>
     </div>
 
-    {{-- Bouton crédit (caissier / admin, facture non payée, pas encore de crédit) --}}
-    @if($facture->statut === 'emise' && !$facture->credit_accorde && (auth()->user()->isCaissier() || auth()->user()->isAdmin()))
+    {{-- Bouton crédit : uniquement si le client a un compte crédit autorisé --}}
+    @if($facture->client->compte_actif && !$facture->credit_accorde && (auth()->user()->isCaissier() || auth()->user()->isAdmin()))
     <div class="mt-3 border-t border-gray-100 pt-3">
         <p class="text-xs text-slate-400 mb-2">Si le client ne peut pas payer maintenant :</p>
-        <form method="POST" action="{{ route('factures.credit', $facture) }}" onsubmit="return confirm('Accorder un crédit pour cette facture ? Le véhicule pourra être restitué sans paiement immédiat.')">
+        <form method="POST" action="{{ route('factures.credit', $facture) }}" onsubmit="return confirm('Accorder un crédit ? Le véhicule pourra être restitué sans paiement immédiat.')">
             @csrf @method('PATCH')
-            <button type="submit"
-                    class="flex items-center gap-2 text-sm border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50 font-bold px-4 py-2 rounded-xl transition-colors">
+            <button type="submit" class="flex items-center gap-2 text-sm border-2 border-indigo-400 text-indigo-600 hover:bg-indigo-50 font-bold px-4 py-2 rounded-xl transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
                 </svg>
-                Accorder un crédit — Autoriser la restitution
+                Mettre sur le compte client — Autoriser la restitution
             </button>
         </form>
     </div>
@@ -163,9 +166,9 @@
                     <td class="px-5 py-3"><span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ $ligne->getTypeLabel() }}</span></td>
                     <td class="px-5 py-3 text-slate-700">{{ $ligne->designation }}</td>
                     <td class="px-5 py-3 text-right text-slate-600">{{ $ligne->quantite }}</td>
-                    <td class="px-5 py-3 text-right text-slate-600">{{ number_format($ligne->prix_unitaire, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right text-slate-600">{{ number_format($ligne->prix_unitaire, 0, ',', ' ') }} FDJ</td>
                     <td class="px-5 py-3 text-right text-slate-500">{{ $ligne->remise > 0 ? $ligne->remise . '%' : '—' }}</td>
-                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($ligne->total_ht, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($ligne->total_ht, 0, ',', ' ') }} FDJ</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -173,10 +176,10 @@
     </div>
     <div class="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end">
         <div class="space-y-2 min-w-64">
-            <div class="flex justify-between text-sm"><span class="text-slate-500">Total HT</span><span class="font-semibold">{{ number_format($facture->montant_ht, 2, ',', ' ') }} FDJ</span></div>
-            <div class="flex justify-between text-sm"><span class="text-slate-500">TVA ({{ $facture->taux_tva }}%)</span><span class="font-semibold">{{ number_format($facture->montant_tva, 2, ',', ' ') }} FDJ</span></div>
+            <div class="flex justify-between text-sm"><span class="text-slate-500">Total HT</span><span class="font-semibold">{{ number_format($facture->montant_ht, 0, ',', ' ') }} FDJ</span></div>
+            <div class="flex justify-between text-sm"><span class="text-slate-500">TVA ({{ $facture->taux_tva }}%)</span><span class="font-semibold">{{ number_format($facture->montant_tva, 0, ',', ' ') }} FDJ</span></div>
             <div class="flex justify-between text-base font-bold border-t border-gray-300 pt-2">
-                <span>Total TTC</span><span class="text-orange-500 text-lg">{{ number_format($facture->montant_ttc, 2, ',', ' ') }} FDJ</span>
+                <span>Total TTC</span><span class="text-orange-500 text-lg">{{ number_format($facture->montant_ttc, 0, ',', ' ') }} FDJ</span>
             </div>
         </div>
     </div>

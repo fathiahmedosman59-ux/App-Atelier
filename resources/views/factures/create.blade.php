@@ -27,33 +27,40 @@
             </div>
         </div>
         <div class="space-y-3">
-            <div>
-                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Mode de paiement</label>
-                <input type="hidden" name="mode_paiement" id="mode_paiement_value"
-                       value="{{ in_array($or->client->type, ['societe','assurance']) ? 'compte' : 'especes' }}">
-                <div class="grid grid-cols-3 gap-2" id="mode-buttons">
-                    @php
-                    $modes = ['especes' => 'Espèces', 'cheque' => 'Chèque', 'carte' => 'Carte', 'virement' => 'Virement', 'compte' => 'Compte société'];
-                    $defaultMode = in_array($or->client->type, ['societe','assurance']) ? 'compte' : 'especes';
-                    @endphp
-                    @foreach($modes as $val => $label)
-                    <button type="button" onclick="selectMode('{{ $val }}')" data-mode="{{ $val }}"
-                            class="mode-btn border-2 rounded-xl px-2 py-2 text-center text-xs font-medium transition-all
-                                   {{ $defaultMode === $val ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-slate-600 hover:border-gray-300' }}">
-                        {{ $label }}
-                    </button>
-                    @endforeach
+            @if($or->client->compte_actif)
+                @if($or->client->plafond_compte && !$or->client->peutFacturerSurCompte())
+                <div class="bg-red-50 border border-red-300 rounded-xl p-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    </svg>
+                    <div>
+                        <p class="text-xs font-bold text-red-800">Plafond de compte atteint — facturation bloquée</p>
+                        <p class="text-xs text-red-700">{{ number_format($or->client->solde_compte, 0, ',', ' ') }} FDJ utilisés sur {{ number_format($or->client->plafond_compte, 0, ',', ' ') }} FDJ autorisés. Encaissez les factures en attente avant de continuer.</p>
+                    </div>
                 </div>
+                @else
+                <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <div>
+                        <p class="text-xs font-bold text-indigo-800">Compte crédit actif</p>
+                        <p class="text-xs text-indigo-600">La facture sera créée non payée. Le caissier pourra encaisser cash ou mettre sur le compte selon le choix du client.</p>
+                    </div>
+                </div>
+                @endif
+            @else
+            <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-center gap-2">
+                <svg class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"/>
+                </svg>
+                <p class="text-xs text-yellow-800">La facture sera créée en mode <strong>non payée</strong>. Le caissier enregistrera le paiement ensuite.</p>
             </div>
+            @endif
             <div>
                 <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">TVA (%)</label>
                 @php $tauxTva = $or->allDevis->where('statut','accepte')->last()?->taux_tva ?? $or->allDevis->last()?->taux_tva ?? 10; @endphp
                 <input type="number" name="taux_tva" value="{{ $tauxTva }}" min="0" max="100" step="0.01"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
-            </div>
-            <div id="echeance_wrap" class="{{ !in_array($or->client->type, ['societe','assurance']) ? 'hidden' : '' }}">
-                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Date d'échéance (compte société)</label>
-                <input type="date" name="date_echeance" value="{{ now()->addDays(30)->format('Y-m-d') }}"
                        class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
         </div>
@@ -145,7 +152,7 @@
                                        class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-remise" oninput="calculerLigne(this)">
                             </td>
                             <td class="px-3 py-3 text-right">
-                                <span class="font-semibold text-slate-800 ligne-total text-xs">{{ number_format($ligne->total_ht, 2, ',', ' ') }}</span>
+                                <span class="font-semibold text-slate-800 ligne-total text-xs">{{ number_format($ligne->total_ht, 0, ',', ' ') }}</span>
                                 <input type="hidden" name="lignes[{{ $i }}][total_ht]" class="ligne-total-input" value="{{ $ligne->total_ht }}">
                             </td>
                             <td class="px-3 py-3 text-center">

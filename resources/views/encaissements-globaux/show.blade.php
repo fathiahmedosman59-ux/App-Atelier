@@ -31,7 +31,7 @@
             @endif
         </div>
         <div class="text-right">
-            <p class="text-2xl font-black text-orange-500">{{ number_format($eg->montant_total, 2, ',', ' ') }} FDJ</p>
+            <p class="text-2xl font-black text-orange-500">{{ number_format($eg->montant_total, 0, ',', ' ') }} FDJ</p>
             <p class="text-xs text-slate-500">{{ $eg->factures->count() }} facture(s)</p>
         </div>
     </div>
@@ -55,7 +55,7 @@
             </div>
             <button type="submit"
                     class="bg-green-500 hover:bg-green-600 text-white font-bold text-sm px-6 py-2 rounded-xl transition-colors">
-                ✓ Confirmer — {{ number_format($eg->montant_total, 2, ',', ' ') }} FDJ encaissés
+                ✓ Confirmer — {{ number_format($eg->montant_total, 0, ',', ' ') }} FDJ encaissés
             </button>
         </form>
         <p class="text-xs text-slate-400 mt-2">Cela marquera les {{ $eg->factures->count() }} facture(s) ci-dessous comme payées.</p>
@@ -88,7 +88,7 @@
                 <p class="text-xs text-slate-500 mt-0.5">Émise le {{ $facture->date_emission->format('d/m/Y') }}</p>
             </div>
             <div class="text-right flex-shrink-0">
-                <p class="font-bold text-slate-800">{{ number_format($facture->totalGeneral(), 2, ',', ' ') }} FDJ</p>
+                <p class="font-bold text-slate-800">{{ number_format($facture->totalGeneral(), 0, ',', ' ') }} FDJ</p>
             </div>
         </div>
         @endforeach
@@ -101,7 +101,7 @@
             </div>
             <div class="flex justify-between font-bold text-base border-t border-gray-300 pt-2">
                 <span>Total général</span>
-                <span class="text-orange-500 text-lg">{{ number_format($eg->montant_total, 2, ',', ' ') }} FDJ</span>
+                <span class="text-orange-500 text-lg">{{ number_format($eg->montant_total, 0, ',', ' ') }} FDJ</span>
             </div>
         </div>
     </div>

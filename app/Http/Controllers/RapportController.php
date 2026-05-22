@@ -112,14 +112,14 @@ class RapportController extends Controller
                 ];
             })->filter(fn($c) => $c['total'] > 0)->values();
 
-        // ── Évolution mensuelle du nombre d'OR (12 derniers mois) ─────
+        // ── Évolution mensuelle du nombre d'OR (année civile en cours) ───
+        $annee = now()->year;
         $evolution = [];
-        for ($i = 11; $i >= 0; $i--) {
-            $mois = now()->subMonths($i);
+        for ($m = 1; $m <= 12; $m++) {
             $evolution[] = [
-                'label' => $mois->format('M Y'),
-                'count' => OrdreReparation::whereYear('created_at', $mois->year)
-                               ->whereMonth('created_at', $mois->month)
+                'label' => \Carbon\Carbon::createFromDate($annee, $m, 1)->translatedFormat('M'),
+                'count' => OrdreReparation::whereYear('created_at', $annee)
+                               ->whereMonth('created_at', $m)
                                ->count(),
             ];
         }
@@ -136,15 +136,14 @@ class RapportController extends Controller
         $nbEmises    = $factureBase()->where('statut', 'emise')->count();
         $caTotal     = $caEncaisse + $caEnAttente;
 
-        // Évolution du CA encaissé mois par mois (12 derniers mois)
+        // Évolution du CA encaissé mois par mois (année civile en cours)
         $evolutionCA = [];
-        for ($i = 11; $i >= 0; $i--) {
-            $mois = now()->subMonths($i);
+        for ($m = 1; $m <= 12; $m++) {
             $evolutionCA[] = [
-                'label' => $mois->format('M Y'),
+                'label' => \Carbon\Carbon::createFromDate($annee, $m, 1)->translatedFormat('M'),
                 'ca'    => (float) Facture::where('statut', 'payee')
-                               ->whereYear('date_paiement', $mois->year)
-                               ->whereMonth('date_paiement', $mois->month)
+                               ->whereYear('date_paiement', $annee)
+                               ->whereMonth('date_paiement', $m)
                                ->sum('montant_ttc'),
             ];
         }

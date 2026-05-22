@@ -36,7 +36,7 @@
                             {{ $d->ordreReparation->numero }}
                         </a>
                     </td>
-                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($d->montant_ttc, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($d->montant_ttc, 0, ',', ' ') }} FDJ</td>
                     <td class="px-5 py-3">
                         <span class="px-2 py-0.5 rounded-full text-xs font-bold
                             @if($d->statut === 'accepte') bg-green-100 text-green-700

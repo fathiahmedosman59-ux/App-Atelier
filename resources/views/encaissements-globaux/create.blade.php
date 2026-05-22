@@ -121,7 +121,7 @@
                 <p class="text-xs text-slate-500 mt-0.5">Émise le {{ $facture->date_emission->format('d/m/Y') }}</p>
             </div>
             <div class="text-right flex-shrink-0">
-                <p class="font-bold text-slate-800 text-sm">{{ number_format($facture->totalGeneral(), 2, ',', ' ') }} FDJ</p>
+                <p class="font-bold text-slate-800 text-sm">{{ number_format($facture->totalGeneral(), 0, ',', ' ') }} FDJ</p>
             </div>
         </label>
         @endforeach

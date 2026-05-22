@@ -105,7 +105,7 @@
             </svg>
             <div>
                 <p class="font-bold text-lg">Facture émise — En attente de paiement</p>
-                <p class="text-blue-100 text-sm">{{ $or->facture->numero }} — {{ number_format($or->facture->totalGeneral(), 2, ',', ' ') }} FDJ</p>
+                <p class="text-blue-100 text-sm">{{ $or->facture->numero }} — {{ number_format($or->facture->totalGeneral(), 0, ',', ' ') }} FDJ</p>
             </div>
         </div>
         <a href="{{ route('factures.show', $or->facture) }}"
@@ -185,63 +185,82 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
                 Devis
+                @if($or->allDevis->count() > 1)
+                <span class="text-xs text-slate-400 font-normal">({{ $or->allDevis->count() }})</span>
+                @endif
             </h3>
             @if(!$or->devis && auth()->user()->canManageWorkshop())
             <a href="{{ route('devis.create', $or) }}"
                class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
                 + Créer un devis
             </a>
-            @elseif($or->devis)
-            <div class="flex items-center gap-2">
-                <a href="{{ route('devis.imprimer', $or->devis) }}" target="_blank"
-                   class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors flex items-center gap-1">
-                    🖨 Imprimer
-                </a>
-                <a href="{{ route('devis.show', $or->devis) }}" class="text-xs text-orange-500 hover:underline font-medium">
-                    Voir {{ $or->devis->numero }} →
-                </a>
-            </div>
+            @elseif($or->devis && $or->devis->statut === 'accepte' && auth()->user()->canManageWorkshop())
+            <a href="{{ route('devis.create', $or) }}"
+               class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                + Devis complémentaire
+            </a>
             @endif
         </div>
 
-        @if(!$or->devis)
+        @if($or->allDevis->isEmpty())
         <p class="text-sm text-slate-400 bg-gray-50 rounded-xl p-3">Aucun devis créé — créez un devis après le diagnostic.</p>
         @else
-        <div class="flex items-center justify-between bg-gray-50 rounded-xl p-4">
-            <div class="flex items-center gap-3">
-                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-{{ $or->devis->getStatutColor() }}-100 text-{{ $or->devis->getStatutColor() }}-700">
-                    {{ $or->devis->getStatutLabel() }}
-                </span>
-                <span class="text-sm text-slate-500">{{ $or->devis->lignes->count() }} lignes</span>
+
+        {{-- Devis précédents (tous sauf le dernier) --}}
+        @foreach($or->allDevis as $dv)
+        @php $isLast = $loop->last; @endphp
+        <div class="{{ !$isLast ? 'mb-3 pb-3 border-b border-gray-100' : '' }}">
+            <div class="flex items-center justify-between bg-gray-50 rounded-xl p-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-bold text-slate-500">{{ $dv->numero }}</span>
+                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-{{ $dv->getStatutColor() }}-100 text-{{ $dv->getStatutColor() }}-700">
+                        {{ $dv->getStatutLabel() }}
+                    </span>
+                    <span class="text-sm text-slate-500">{{ $dv->lignes->count() }} lignes</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-right">
+                        <p class="text-base font-bold text-slate-900">{{ number_format($dv->montant_ttc, 0, ',', ' ') }} FDJ TTC</p>
+                        <p class="text-xs text-slate-400">HT : {{ number_format($dv->montant_ht, 0, ',', ' ') }} FDJ</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <a href="{{ route('devis.imprimer', $dv) }}" target="_blank"
+                           class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors">
+                            🖨
+                        </a>
+                        <a href="{{ route('devis.show', $dv) }}" class="text-xs text-orange-500 hover:underline font-medium px-2">
+                            Voir →
+                        </a>
+                    </div>
+                </div>
             </div>
-            <div class="text-right">
-                <p class="text-lg font-bold text-slate-900">{{ number_format($or->devis->montant_ttc, 2, ',', ' ') }} FDJ TTC</p>
-                <p class="text-xs text-slate-400">HT : {{ number_format($or->devis->montant_ht, 2, ',', ' ') }} FDJ</p>
+
+            {{-- Actions sur le dernier devis uniquement --}}
+            @if($isLast && in_array($dv->statut, ['brouillon','envoye']) && auth()->user()->canManageWorkshop())
+            <div class="flex gap-2 mt-3">
+                <form method="POST" action="{{ route('devis.envoyer', $dv) }}" class="flex-1">
+                    @csrf @method('PATCH')
+                    <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2 rounded-xl transition-colors">📤 Envoyé au client</button>
+                </form>
+                <form method="POST" action="{{ route('devis.accepter', $dv) }}" class="flex-1">
+                    @csrf @method('PATCH')
+                    <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 rounded-xl transition-colors">✓ Client a accepté</button>
+                </form>
+                <form method="POST" action="{{ route('devis.refuser', $dv) }}" class="flex-1">
+                    @csrf @method('PATCH')
+                    <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 rounded-xl transition-colors" onclick="return confirm('Confirmer le refus ?')">✗ Refusé</button>
+                </form>
             </div>
+            <form method="POST" action="{{ route('devis.upload-signature', $dv) }}" enctype="multipart/form-data" class="flex gap-2 mt-2">
+                @csrf @method('PATCH')
+                <input type="file" name="fichier_signe" accept=".pdf,.jpg,.jpeg,.png"
+                       class="flex-1 text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-orange-600">
+                <button type="submit" class="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl">Upload devis signé</button>
+            </form>
+            @endif
         </div>
-        @if(in_array($or->devis->statut, ['brouillon','envoye']) && auth()->user()->canManageWorkshop())
-        <div class="flex gap-2 mt-3">
-            <form method="POST" action="{{ route('devis.envoyer', $or->devis) }}" class="flex-1">
-                @csrf @method('PATCH')
-                <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2 rounded-xl transition-colors">📤 Envoyé au client</button>
-            </form>
-            <form method="POST" action="{{ route('devis.accepter', $or->devis) }}" class="flex-1">
-                @csrf @method('PATCH')
-                <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-2 rounded-xl transition-colors">✓ Client a accepté</button>
-            </form>
-            <form method="POST" action="{{ route('devis.refuser', $or->devis) }}" class="flex-1">
-                @csrf @method('PATCH')
-                <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 rounded-xl transition-colors" onclick="return confirm('Confirmer le refus ?')">✗ Refusé</button>
-            </form>
-        </div>
-        {{-- Upload signé --}}
-        <form method="POST" action="{{ route('devis.upload-signature', $or->devis) }}" enctype="multipart/form-data" class="flex gap-2 mt-2">
-            @csrf @method('PATCH')
-            <input type="file" name="fichier_signe" accept=".pdf,.jpg,.jpeg,.png"
-                   class="flex-1 text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-orange-600">
-            <button type="submit" class="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl">Upload devis signé</button>
-        </form>
-        @endif
+        @endforeach
+
         @endif
     </div>
 
@@ -597,7 +616,10 @@
 
     {{-- Affectation technicien --}}
     @if(auth()->user()->canManageWorkshop())
-    <div class="bg-white rounded-2xl border-2 {{ $or->isAffecte() ? 'border-green-300' : 'border-orange-300' }} p-5">
+    @php
+        $bcBloquant = $or->bonsCommande()->whereIn('statut', ['en_attente', 'commande'])->first();
+    @endphp
+    <div class="bg-white rounded-2xl border-2 {{ $bcBloquant ? 'border-yellow-300' : ($or->isAffecte() ? 'border-green-300' : 'border-orange-300') }} p-5">
         <h3 class="text-sm font-semibold text-slate-700 mb-3">Affectation mécanicien</h3>
 
         @if($or->isAffecte())
@@ -616,6 +638,16 @@
         </div>
         @endif
 
+        @if($bcBloquant)
+        {{-- BC pièces pas encore reçu — bloquer l'affectation --}}
+        <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
+            <p class="font-bold mb-1">⏳ En attente des pièces</p>
+            <p>Le bon de commande <span class="font-mono font-bold">{{ $bcBloquant->numero }}</span> est
+                <span class="font-bold">{{ $bcBloquant->statut === 'en_attente' ? 'en attente de commande' : 'commandé' }}</span>.
+            </p>
+            <p class="mt-1">Le magasinier doit marquer <strong>"Tout reçu"</strong> avant de pouvoir affecter un mécanicien.</p>
+        </div>
+        @else
         <form method="POST" action="{{ route('ordres-reparations.affecter', $or) }}" class="space-y-2 mt-2">
             @csrf @method('PATCH')
             <select name="technicien_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -638,6 +670,7 @@
                 {{ $or->isAffecte() ? 'Réaffecter' : 'Affecter' }}
             </button>
         </form>
+        @endif
     </div>
     @elseif($or->technicien)
     <div class="bg-white rounded-2xl border border-gray-200 p-5">

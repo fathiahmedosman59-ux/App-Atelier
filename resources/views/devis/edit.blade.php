@@ -1,17 +1,17 @@
 @extends('layouts.app')
-@section('title', 'Créer un devis')
-@section('page-title', 'Créer un devis')
-@section('page-subtitle', $or->numero . ' — ' . $or->client->nom_complet)
+@section('title', 'Modifier ' . $devis->numero)
+@section('page-title', 'Modifier le devis')
+@section('page-subtitle', $devis->numero . ' — ' . $devis->ordreReparation->client->nom_complet)
 
 @section('header-actions')
-<a href="{{ route('ordres-reparations.show', $or) }}" class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
-    ← Retour OR
+<a href="{{ route('devis.show', $devis) }}" class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
+    ← Retour devis
 </a>
 @endsection
 
 @section('content')
-<form method="POST" action="{{ route('devis.store', $or) }}" id="form-devis">
-@csrf
+<form method="POST" action="{{ route('devis.update', $devis) }}" id="form-devis">
+@csrf @method('PUT')
 
 <div class="max-w-5xl space-y-5">
 
@@ -20,16 +20,16 @@
     <div class="grid grid-cols-3 gap-4">
         <div class="bg-orange-50 rounded-xl p-4">
             <p class="text-xs text-orange-400 mb-1">Ordre de réparation</p>
-            <p class="font-mono font-bold text-slate-900">{{ $or->numero }}</p>
+            <p class="font-mono font-bold text-slate-900">{{ $devis->ordreReparation->numero }}</p>
         </div>
         <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-xs text-slate-400 mb-1">Client</p>
-            <p class="font-semibold text-slate-800 text-sm">{{ $or->client->nom_complet }}</p>
+            <p class="font-semibold text-slate-800 text-sm">{{ $devis->ordreReparation->client->nom_complet }}</p>
         </div>
         <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-xs text-slate-400 mb-1">Véhicule</p>
-            <p class="font-mono font-bold text-slate-700">{{ $or->vehicule->immatriculation }}</p>
-            <p class="text-xs text-slate-500">{{ $or->vehicule->designation }}</p>
+            <p class="font-mono font-bold text-slate-700">{{ $devis->ordreReparation->vehicule->immatriculation }}</p>
+            <p class="text-xs text-slate-500">{{ $devis->ordreReparation->vehicule->designation }}</p>
         </div>
     </div>
 </div>
@@ -39,12 +39,12 @@
     <div class="grid grid-cols-3 gap-4">
         <div>
             <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Taux TVA (%)</label>
-            <input type="number" name="taux_tva" value="10" min="0" max="100" step="0.01"
+            <input type="number" name="taux_tva" value="{{ $devis->taux_tva }}" min="0" max="100" step="0.01"
                    class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
         </div>
         <div class="col-span-2">
             <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notes / Conditions</label>
-            <input type="text" name="notes" placeholder="Validité du devis, remarques..."
+            <input type="text" name="notes" value="{{ $devis->notes }}" placeholder="Validité du devis, remarques..."
                    class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
         </div>
     </div>
@@ -84,41 +84,45 @@
                 </tr>
             </thead>
             <tbody id="lignes-body">
-                {{-- Ligne initiale main_oeuvre pré-remplie du motif --}}
-                <tr class="ligne-row border-b border-gray-100" data-index="0">
+                @foreach($devis->lignes as $i => $ligne)
+                @php $isPiece = $ligne->type === 'piece'; @endphp
+                <tr class="ligne-row border-b border-gray-100" data-index="{{ $i }}">
                     <td class="px-3 py-3">
-                        <select name="lignes[0][type]" onchange="typeChanged(this)"
+                        <select name="lignes[{{ $i }}][type]" onchange="typeChanged(this)"
                                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-orange-500">
-                            <option value="main_oeuvre" selected>Main d'œuvre</option>
-                            <option value="piece">Pièce</option>
+                            <option value="main_oeuvre" {{ $ligne->type === 'main_oeuvre' ? 'selected' : '' }}>Main d'œuvre</option>
+                            <option value="piece" {{ $ligne->type === 'piece' ? 'selected' : '' }}>Pièce</option>
                         </select>
                     </td>
                     <td class="px-3 py-3">
-                        <input type="text" name="lignes[0][designation]" value="{{ $or->motif_entree }}"
+                        <input type="text" name="lignes[{{ $i }}][designation]" value="{{ $ligne->designation }}"
                                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" required>
                     </td>
                     <td class="px-3 py-3">
-                        <input type="text" name="lignes[0][reference]" disabled placeholder="—"
-                               class="w-full border border-gray-100 bg-gray-50 rounded-lg px-2 py-1.5 text-xs text-slate-400 ligne-ref cursor-not-allowed">
+                        <input type="text" name="lignes[{{ $i }}][reference]" value="{{ $ligne->reference }}"
+                               {{ !$isPiece ? 'disabled' : '' }}
+                               class="w-full border rounded-lg px-2 py-1.5 text-xs ligne-ref {{ $isPiece ? 'border-gray-300 bg-white focus:outline-none focus:ring-1 focus:ring-orange-500' : 'border-gray-100 bg-gray-50 text-slate-400 cursor-not-allowed' }}"
+                               placeholder="{{ $isPiece ? 'Ex: OE-12345' : '—' }}">
                     </td>
                     <td class="px-3 py-3">
                         <div class="flex items-center gap-1">
-                            <input type="number" name="lignes[0][quantite]" value="1" min="0.01" step="0.01" placeholder="Heures"
+                            <input type="number" name="lignes[{{ $i }}][quantite]" value="{{ $ligne->quantite }}" min="0.01" step="0.01"
+                                   placeholder="{{ !$isPiece ? 'Heures' : 'Qté' }}"
                                    class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-qty" oninput="calculerLigne(this)">
-                            <span class="ligne-unite text-xs font-bold text-blue-500 w-4 text-center">h</span>
+                            <span class="ligne-unite text-xs font-bold w-4 text-center {{ !$isPiece ? 'text-blue-500' : 'text-orange-500' }}">{{ !$isPiece ? 'h' : 'u' }}</span>
                         </div>
                     </td>
                     <td class="px-3 py-3">
-                        <input type="number" name="lignes[0][prix_unitaire]" value="0" min="0" step="0.01"
+                        <input type="number" name="lignes[{{ $i }}][prix_unitaire]" value="{{ $ligne->prix_unitaire }}" min="0" step="0.01"
                                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu" oninput="calculerLigne(this)">
                     </td>
                     <td class="px-3 py-3">
-                        <input type="number" name="lignes[0][remise]" value="0" min="0" max="100" step="0.01"
+                        <input type="number" name="lignes[{{ $i }}][remise]" value="{{ $ligne->remise }}" min="0" max="100" step="0.01"
                                class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-remise" oninput="calculerLigne(this)">
                     </td>
                     <td class="px-3 py-3 text-right">
-                        <span class="font-semibold text-slate-800 ligne-total text-xs">0,00</span>
-                        <input type="hidden" name="lignes[0][total_ht]" class="ligne-total-input" value="0">
+                        <span class="font-semibold text-slate-800 ligne-total text-xs">{{ number_format($ligne->total_ht, 0, ',', ' ') }}</span>
+                        <input type="hidden" name="lignes[{{ $i }}][total_ht]" class="ligne-total-input" value="{{ $ligne->total_ht }}">
                     </td>
                     <td class="px-3 py-3 text-center">
                         <button type="button" onclick="supprimerLigne(this)" class="text-red-400 hover:text-red-600 transition-colors">
@@ -126,6 +130,7 @@
                         </button>
                     </td>
                 </tr>
+                @endforeach
             </tbody>
         </table>
     </div>
@@ -139,7 +144,7 @@
                     <span class="font-semibold text-slate-800" id="total-ht">0,00 FDJ</span>
                 </div>
                 <div class="flex justify-between text-sm">
-                    <span class="text-slate-500">TVA (<span id="taux-tva-display">10</span>%)</span>
+                    <span class="text-slate-500">TVA (<span id="taux-tva-display">{{ $devis->taux_tva }}</span>%)</span>
                     <span class="font-semibold text-slate-800" id="total-tva">0,00 FDJ</span>
                 </div>
                 <div class="flex justify-between text-base font-bold border-t border-gray-300 pt-2">
@@ -154,9 +159,9 @@
 {{-- Actions --}}
 <div class="flex items-center gap-3 pb-6">
     <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm text-sm">
-        Enregistrer le devis
+        Enregistrer les modifications
     </button>
-    <a href="{{ route('ordres-reparations.show', $or) }}" class="px-6 py-3 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm">
+    <a href="{{ route('devis.show', $devis) }}" class="px-6 py-3 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm">
         Annuler
     </a>
 </div>
@@ -165,7 +170,7 @@
 </form>
 
 <script>
-let ligneIndex = 1;
+let ligneIndex = {{ $devis->lignes->count() }};
 
 function ajouterLigne(type) {
     const i = ligneIndex++;
@@ -237,16 +242,16 @@ function typeChanged(select) {
         refInput.placeholder = 'Ex: OE-12345';
         refInput.className   = 'w-full border border-gray-300 bg-white rounded-lg px-2 py-1.5 text-xs ligne-ref focus:outline-none focus:ring-1 focus:ring-orange-500';
         qtyInput.placeholder = 'Qté';
-        uniteSpan.textContent  = 'u';
-        uniteSpan.className    = 'ligne-unite text-xs font-bold text-orange-500 w-4 text-center';
+        uniteSpan.textContent = 'u';
+        uniteSpan.className   = 'ligne-unite text-xs font-bold text-orange-500 w-4 text-center';
     } else {
         refInput.disabled    = true;
         refInput.value       = '';
         refInput.placeholder = '—';
         refInput.className   = 'w-full border border-gray-100 bg-gray-50 rounded-lg px-2 py-1.5 text-xs text-slate-400 ligne-ref cursor-not-allowed';
         qtyInput.placeholder = 'Heures';
-        uniteSpan.textContent  = 'h';
-        uniteSpan.className    = 'ligne-unite text-xs font-bold text-blue-500 w-4 text-center';
+        uniteSpan.textContent = 'h';
+        uniteSpan.className   = 'ligne-unite text-xs font-bold text-blue-500 w-4 text-center';
     }
 }
 
@@ -263,8 +268,8 @@ function calculerLigne(input) {
     const pu     = parseFloat(row.querySelector('.ligne-pu').value) || 0;
     const remise = parseFloat(row.querySelector('.ligne-remise').value) || 0;
     const total  = qty * pu * (1 - remise / 100);
-    row.querySelector('.ligne-total').textContent       = formatFDJ(total);
-    row.querySelector('.ligne-total-input').value       = total.toFixed(2);
+    row.querySelector('.ligne-total').textContent  = formatFDJ(total);
+    row.querySelector('.ligne-total-input').value  = total.toFixed(2);
     recalculerTotaux();
 }
 

@@ -176,19 +176,21 @@
     </div>
 
     @php
-        $devis      = $or->devis;
-        $lignesMO   = $devis ? $devis->lignes->where('type', 'main_oeuvre') : collect();
-        $lignesPce  = $devis ? $devis->lignes->where('type', 'piece') : collect();
-        $lignesAutr = $devis ? $devis->lignes->whereNotIn('type', ['main_oeuvre','piece']) : collect();
+        // Regrouper les lignes de TOUS les devis de cet OR
+        $tousLesDevis = $or->allDevis;
+        $toutesLignes = $tousLesDevis->flatMap(fn($d) => $d->lignes);
+        $lignesMO     = $toutesLignes->where('type', 'main_oeuvre');
+        $lignesPce    = $toutesLignes->where('type', 'piece');
+        $lignesAutr   = $toutesLignes->whereNotIn('type', ['main_oeuvre','piece']);
     @endphp
 
     {{-- ── Travaux main d'œuvre ──────────────────────────── --}}
     <div class="section">
         <div class="section-title">
             Travaux à effectuer — Main d'œuvre
-            @if($devis)
+            @if($tousLesDevis->isNotEmpty())
                 <span style="font-size:7.5pt;color:#5B3FAF;font-weight:400;text-transform:none;letter-spacing:0;">
-                    (Devis {{ $devis->numero }} — {{ $devis->getStatutLabel() }})
+                    ({{ $tousLesDevis->pluck('numero')->implode(' + ') }})
                 </span>
             @endif
         </div>

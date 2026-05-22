@@ -208,7 +208,7 @@ class OrdreReparationController extends Controller
      */
     public function show(OrdreReparation $ordresReparation)
     {
-        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'photos', 'photosOr', 'devis', 'facture']);
+        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'photos', 'photosOr', 'devis', 'allDevis.lignes', 'facture']);
         return view('ordres-reparations.show', ['or' => $ordresReparation]);
     }
 
@@ -370,6 +370,14 @@ class OrdreReparationController extends Controller
     {
         if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
 
+        // Bloquer si un BC pièces existe et n'est pas encore entièrement reçu
+        $bcEnAttente = $ordresReparation->bonsCommande()
+            ->whereIn('statut', ['en_attente', 'commande'])
+            ->exists();
+        if ($bcEnAttente) {
+            return back()->with('error', 'Impossible d\'affecter : le bon de commande pièces n\'est pas encore marqué "Tout reçu".');
+        }
+
         $request->validate([
             'technicien_id' => ['required', 'exists:users,id'],
             'service'       => ['required', 'in:rapide,mecanique,electricite,carrosserie,peinture'],
@@ -429,7 +437,7 @@ class OrdreReparationController extends Controller
      */
     public function feuilletTravail(OrdreReparation $ordresReparation)
     {
-        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'devis.lignes']);
+        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'allDevis.lignes']);
         return view('ordres-reparations.feuille-travail', ['or' => $ordresReparation]);
     }
 

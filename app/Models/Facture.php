@@ -211,14 +211,16 @@ class Facture extends Model
     }
 
     /** Retourne le libellé du mode de paiement */
-    public function getModePaiementLabel(): string
+    public function getModePaiementLabel(): ?string
     {
         return match($this->mode_paiement) {
             'especes'  => 'Espèces',
             'cheque'   => 'Chèque',
-            'carte'    => 'Carte bancaire',
+            'waafi'    => 'Waafi',
+            'cac'      => 'CAC',
+            'carte'    => 'Carte',
             'virement' => 'Virement',
-            'compte'   => 'Compte société',
+            null       => 'En attente d\'encaissement',
             default    => $this->mode_paiement,
         };
     }

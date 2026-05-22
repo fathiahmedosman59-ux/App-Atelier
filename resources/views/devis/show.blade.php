@@ -5,6 +5,19 @@
 
 @section('header-actions')
 <div class="flex gap-2">
+    @if(in_array($devis->statut, ['brouillon','envoye']) && auth()->user()->hasPermission('gerer_devis'))
+    <a href="{{ route('devis.edit', $devis) }}"
+       class="flex items-center gap-2 text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg px-3 py-2 transition-colors">
+        ✏️ Modifier
+    </a>
+    <form method="POST" action="{{ route('devis.destroy', $devis) }}"
+          onsubmit="return confirm('Supprimer ce devis ? Cette action est irréversible.')">
+        @csrf @method('DELETE')
+        <button type="submit" class="flex items-center gap-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 py-2 transition-colors">
+            🗑 Supprimer
+        </button>
+    </form>
+    @endif
     <a href="{{ route('devis.imprimer', $devis) }}" target="_blank"
        class="flex items-center gap-2 text-sm bg-slate-700 hover:bg-slate-800 text-white rounded-lg px-3 py-2 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -128,14 +141,14 @@
                         {{ $ligne->reference ?: '—' }}
                     </td>
                     <td class="px-5 py-3 text-right text-slate-600">
-                        {{ number_format($ligne->quantite, 2, ',', ' ') }}
+                        {{ number_format($ligne->quantite, 0, ',', ' ') }}
                         @if($ligne->type === 'main_oeuvre')
                             <span class="text-xs text-blue-500">h</span>
                         @endif
                     </td>
-                    <td class="px-5 py-3 text-right text-slate-600">{{ number_format($ligne->prix_unitaire, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right text-slate-600">{{ number_format($ligne->prix_unitaire, 0, ',', ' ') }} FDJ</td>
                     <td class="px-5 py-3 text-right text-slate-500">{{ $ligne->remise > 0 ? $ligne->remise . '%' : '—' }}</td>
-                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($ligne->total_ht, 2, ',', ' ') }} FDJ</td>
+                    <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($ligne->total_ht, 0, ',', ' ') }} FDJ</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -147,15 +160,15 @@
         <div class="space-y-2 min-w-64">
             <div class="flex justify-between text-sm">
                 <span class="text-slate-500">Total HT</span>
-                <span class="font-semibold">{{ number_format($devis->montant_ht, 2, ',', ' ') }} FDJ</span>
+                <span class="font-semibold">{{ number_format($devis->montant_ht, 0, ',', ' ') }} FDJ</span>
             </div>
             <div class="flex justify-between text-sm">
                 <span class="text-slate-500">TVA ({{ $devis->taux_tva }}%)</span>
-                <span class="font-semibold">{{ number_format($devis->montant_tva, 2, ',', ' ') }} FDJ</span>
+                <span class="font-semibold">{{ number_format($devis->montant_tva, 0, ',', ' ') }} FDJ</span>
             </div>
             <div class="flex justify-between text-base font-bold border-t border-gray-300 pt-2">
                 <span class="text-slate-800">Total TTC</span>
-                <span class="text-orange-500 text-lg">{{ number_format($devis->montant_ttc, 2, ',', ' ') }} FDJ</span>
+                <span class="text-orange-500 text-lg">{{ number_format($devis->montant_ttc, 0, ',', ' ') }} FDJ</span>
             </div>
         </div>
     </div>

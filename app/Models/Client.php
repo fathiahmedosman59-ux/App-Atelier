@@ -58,7 +58,7 @@ class Client extends Model
      */
     public function getSoldeCompteAttribute(): float
     {
-        return (float) $this->factures()->where('statut', 'emise')->sum('montant_ttc');
+        return (float) $this->factures()->where('statut', 'emise')->where('credit_accorde', true)->sum('montant_ttc');
     }
 
     /**
@@ -75,10 +75,10 @@ class Client extends Model
      * Indique si le client peut encore se faire facturer sur son compte crédit.
      * Retourne false si le compte n'est pas actif ou si le plafond est déjà atteint.
      */
-    public function peutFacturerSurCompte(): bool
+    public function peutFacturerSurCompte(float $montantAdditionnel = 0): bool
     {
         if (! $this->compte_actif || ! $this->plafond_compte) return false;
-        return $this->solde_compte < (float) $this->plafond_compte;
+        return ($this->solde_compte + $montantAdditionnel) <= (float) $this->plafond_compte;
     }
 
     // ── Attributs calculés ─────────────────────────────────────────────
@@ -92,7 +92,7 @@ class Client extends Model
     public function getNomCompletAttribute(): string
     {
         return match($this->type) {
-            'particulier' => trim($this->prenom . ' ' . $this->nom),
+            'particulier' => trim(($this->prenom ? $this->prenom . ' ' : '') . $this->nom),
             'societe'     => $this->raison_sociale ?? $this->nom,
             'assurance'   => $this->raison_sociale ?? $this->nom,
             default       => $this->nom,

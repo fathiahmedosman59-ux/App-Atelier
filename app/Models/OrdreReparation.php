@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\Models\PhotoOr;
+use App\Models\BonCommande;
 
 /**
  * Modèle OrdreReparation.
@@ -90,6 +91,9 @@ class OrdreReparation extends Model
 
     /** Tous les devis établis pour cet OR (un OR peut avoir plusieurs devis successifs) */
     public function allDevis(): HasMany     { return $this->hasMany(Devis::class, 'or_id')->orderBy('id'); }
+
+    /** Tous les bons de commande liés à cet OR */
+    public function bonsCommande(): HasMany { return $this->hasMany(BonCommande::class, 'or_id'); }
 
     /** Facture liée à cet OR */
     public function facture(): HasOne       { return $this->hasOne(Facture::class, 'or_id'); }

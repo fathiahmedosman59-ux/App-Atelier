@@ -140,8 +140,8 @@
                          style="width: {{ $pourcentage }}%"></div>
                 </div>
                 <div class="flex justify-between text-xs">
-                    <span class="text-slate-500">Utilisé : <strong class="{{ $depasse ? 'text-red-600' : 'text-slate-700' }}">{{ number_format($solde, 2, ',', ' ') }} FDJ</strong></span>
-                    <span class="text-slate-500">Plafond : <strong>{{ number_format($plafond, 2, ',', ' ') }} FDJ</strong></span>
+                    <span class="text-slate-500">Utilisé : <strong class="{{ $depasse ? 'text-red-600' : 'text-slate-700' }}">{{ number_format($solde, 0, ',', ' ') }} FDJ</strong></span>
+                    <span class="text-slate-500">Plafond : <strong>{{ number_format($plafond, 0, ',', ' ') }} FDJ</strong></span>
                 </div>
             </div>
             @endif
