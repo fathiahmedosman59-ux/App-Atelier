@@ -75,7 +75,7 @@
     @endif
 
     {{-- Paiement encaissé --}}
-    @if($facture->statut === 'emise' && $facture->getMontantRestant() > 0 && !$facture->credit_accorde && auth()->user()->hasPermission('gerer_factures'))
+    @if($facture->statut === 'emise' && $facture->getMontantRestant() > 0 && !$facture->credit_accorde && auth()->user()->hasPermission('encaisser_factures'))
     <div class="mt-4 border-t border-gray-100 pt-4">
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Paiement encaissé</p>
         <form method="POST" action="{{ route('factures.payer', $facture) }}" class="space-y-3">

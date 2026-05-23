@@ -151,7 +151,7 @@
                         {{ $facture->date_paiement ? $facture->date_paiement->format('d/m/Y') : '—' }}
                     </td>
                     <td class="px-5 py-3 text-right">
-                        @if($facture->statut === 'emise' && auth()->user()->hasPermission('gerer_factures'))
+                        @if($facture->statut === 'emise' && auth()->user()->hasPermission('encaisser_factures'))
                         <a href="{{ route('factures.show', $facture) }}"
                            class="text-xs bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-1 rounded-lg transition-colors">
                             Encaisser

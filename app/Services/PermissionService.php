@@ -30,8 +30,9 @@ class PermissionService
             'gerer_devis' => 'Créer / modifier / supprimer les devis',
         ],
         'Factures' => [
-            'voir_factures'  => 'Voir les factures',
-            'gerer_factures' => 'Créer la facture et enregistrer les paiements',
+            'voir_factures'      => 'Voir les factures',
+            'creer_factures'     => 'Créer une facture depuis un OR',
+            'encaisser_factures' => 'Enregistrer les paiements (encaisser les factures)',
         ],
         'Bons de commande' => [
             'voir_bons_commande'  => 'Voir les bons de commande',
@@ -57,7 +58,7 @@ class PermissionService
             'voir_vehicules', 'gerer_vehicules',
             'voir_ordres', 'creer_ordres', 'gerer_ordres', 'affecter_technicien', 'valider_qualite', 'valider_lavage', 'restituer_vehicule',
             'voir_devis', 'gerer_devis',
-            'voir_factures', 'gerer_factures',
+            'voir_factures', 'creer_factures', 'encaisser_factures',
             'voir_bons_commande', 'gerer_bons_commande',
             'voir_encaissements',
             'voir_rapports', 'voir_activites',
@@ -83,7 +84,7 @@ class PermissionService
         'caissier' => [
             'voir_clients', 'gerer_compte_credit',
             'voir_ordres',
-            'voir_factures', 'gerer_factures',
+            'voir_factures', 'creer_factures', 'encaisser_factures',
             'voir_encaissements', 'gerer_encaissements',
         ],
     ];

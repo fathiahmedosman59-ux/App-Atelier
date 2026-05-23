@@ -43,7 +43,7 @@
        class="flex items-center gap-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-2 transition-colors">
         🧾 {{ $or->facture->statut === 'payee' ? 'Facture payée' : 'Encaisser' }}
     </a>
-    @elseif($or->statut === 'pret' && auth()->user()->isCaissier())
+    @elseif($or->statut === 'pret' && auth()->user()->hasPermission('creer_factures'))
     <a href="{{ route('factures.create', $or) }}"
        class="flex items-center gap-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-2 transition-colors font-bold">
         🧾 Créer la facture
@@ -80,7 +80,7 @@
 @endif
 
 {{-- ═══ BANNIÈRE CAISSIER ══════════════════════════════════ --}}
-@if(auth()->user()->isCaissier())
+@if(auth()->user()->hasPermission('creer_factures'))
     @if($or->statut === 'pret' && !$or->facture)
     <div class="mb-4 bg-green-500 rounded-2xl p-5 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3 text-white">
@@ -414,7 +414,7 @@
     @endif
 
     {{-- Facturation --}}
-    @if($or->statut === 'pret' && !$or->facture && (auth()->user()->canManageWorkshop() || auth()->user()->isCaissier()))
+    @if($or->statut === 'pret' && !$or->facture && auth()->user()->hasPermission('creer_factures'))
     <div class="bg-white rounded-2xl border-2 border-green-300 p-6">
         <h3 class="font-semibold text-slate-800 mb-3 flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Véhicule prêt — Créer la facture

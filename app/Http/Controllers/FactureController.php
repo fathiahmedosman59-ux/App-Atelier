@@ -59,19 +59,19 @@ class FactureController extends Controller
 
     /**
      * Affiche le formulaire de création d'une facture pour un OR donné.
-     * Réservé aux utilisateurs avec la permission 'gerer_factures' (caissier, admin).
+     * Réservé aux utilisateurs avec la permission 'creer_factures' (caissier, admin).
      * Charge tous les devis de l'OR pour permettre de reprendre les lignes.
      */
     public function create(OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_factures')) abort(403);
+        if (! auth()->user()->hasPermission('creer_factures')) abort(403);
         $ordresReparation->load(['client', 'vehicule', 'allDevis.lignes']);
         return view('factures.create', ['or' => $ordresReparation]);
     }
 
     /**
      * Enregistre une nouvelle facture en base de données.
-     * Réservé aux utilisateurs avec la permission 'gerer_factures'.
+     * Réservé aux utilisateurs avec la permission 'creer_factures'.
      * Étapes :
      *   1. Validation des données (lignes, TVA, mode de paiement)
      *   2. Vérification du plafond si paiement sur compte société
@@ -81,7 +81,7 @@ class FactureController extends Controller
      */
     public function store(Request $request, OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_factures')) abort(403);
+        if (! auth()->user()->hasPermission('creer_factures')) abort(403);
 
         $isSociete = in_array($ordresReparation->client->type, ['societe', 'assurance']);
 
@@ -225,7 +225,7 @@ class FactureController extends Controller
      */
     public function marquerPayee(Request $request, Facture $facture)
     {
-        if (! auth()->user()->hasPermission('gerer_factures')) abort(403);
+        if (! auth()->user()->hasPermission('encaisser_factures')) abort(403);
         $request->validate([
             'montant_paye'   => ['required', 'numeric', 'min:0'],
             'date_paiement'  => ['required', 'date'],

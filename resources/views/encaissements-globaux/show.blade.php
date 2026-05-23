@@ -43,7 +43,7 @@
     </div>
     @else
     {{-- Formulaire paiement --}}
-    @if(auth()->user()->hasPermission('gerer_factures'))
+    @if(auth()->user()->hasPermission('encaisser_factures'))
     <div class="mt-4 border-t border-gray-100 pt-4">
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Confirmer le paiement global</p>
         <form method="POST" action="{{ route('encaissements-globaux.payer', $eg) }}" class="flex gap-3 items-end flex-wrap">

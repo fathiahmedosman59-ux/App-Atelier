@@ -5,7 +5,7 @@
 
 @section('header-actions')
 <div class="flex gap-2">
-    @if(auth()->user()->hasPermission('gerer_factures') && $client->compte_actif)
+    @if(auth()->user()->hasPermission('encaisser_factures') && $client->compte_actif)
     @php $nbFacturesEmises = \App\Models\Facture::where('client_id',$client->id)->where('statut','emise')->whereNull('encaissement_global_id')->count(); @endphp
     @if($nbFacturesEmises > 0)
     <a href="{{ route('encaissements-globaux.create', ['client_id' => $client->id]) }}"

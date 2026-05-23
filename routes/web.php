@@ -119,21 +119,23 @@ Route::middleware('auth')->group(function () {
         Route::get('/factures/{facture}',              [FactureController::class, 'show'])->name('factures.show');
         Route::get('/factures/{facture}/imprimer',     [FactureController::class, 'imprimer'])->name('factures.imprimer');
     });
-    Route::middleware('perm:gerer_factures')->group(function () {
+    Route::middleware('perm:creer_factures')->group(function () {
         Route::get('/ordres-reparations/{ordresReparation}/facture/creer', [FactureController::class, 'create'])->name('factures.create');
         Route::post('/ordres-reparations/{ordresReparation}/facture',      [FactureController::class, 'store'])->name('factures.store');
-        Route::patch('/factures/{facture}/payer',                          [FactureController::class, 'marquerPayee'])->name('factures.payer');
-        Route::patch('/factures/{facture}/credit',                         [FactureController::class, 'accorderCredit'])->name('factures.credit');
-        Route::patch('/factures/{facture}/revoquer-credit',                [FactureController::class, 'revoquerCredit'])->name('factures.revoquer-credit');
+    });
+    Route::patch('/factures/{facture}/payer',          [FactureController::class, 'marquerPayee'])->name('factures.payer')->middleware('perm:encaisser_factures');
+    Route::middleware('perm:gerer_compte_credit')->group(function () {
+        Route::patch('/factures/{facture}/credit',         [FactureController::class, 'accorderCredit'])->name('factures.credit');
+        Route::patch('/factures/{facture}/revoquer-credit',[FactureController::class, 'revoquerCredit'])->name('factures.revoquer-credit');
     });
 
     // ── Encaissements globaux ─────────────────────────────────
-    Route::get('/encaissements-globaux/creer', [EncaissementGlobalController::class, 'create'])->name('encaissements-globaux.create')->middleware('perm:gerer_factures');
-    Route::middleware('perm:voir_factures')->group(function () {
+    Route::get('/encaissements-globaux/creer', [EncaissementGlobalController::class, 'create'])->name('encaissements-globaux.create')->middleware('perm:gerer_encaissements');
+    Route::middleware('perm:voir_encaissements')->group(function () {
         Route::get('/encaissements-globaux',                                [EncaissementGlobalController::class, 'index'])->name('encaissements-globaux.index');
         Route::get('/encaissements-globaux/{encaissementsGlobaux}',         [EncaissementGlobalController::class, 'show'])->name('encaissements-globaux.show');
     });
-    Route::middleware('perm:gerer_factures')->group(function () {
+    Route::middleware('perm:gerer_encaissements')->group(function () {
         Route::post('/encaissements-globaux',                               [EncaissementGlobalController::class, 'store'])->name('encaissements-globaux.store');
         Route::patch('/encaissements-globaux/{encaissementsGlobaux}/payer', [EncaissementGlobalController::class, 'marquerPaye'])->name('encaissements-globaux.payer');
     });
