@@ -6,9 +6,11 @@ class PermissionService
 {
     public static array $groups = [
         'Clients' => [
-            'voir_clients'       => 'Voir les clients',
-            'gerer_clients'      => 'Créer / modifier / supprimer les clients',
-            'gerer_compte_credit'=> 'Activer le compte crédit, définir le plafond, accorder/révoquer crédit sur facture',
+            'voir_clients'            => 'Voir les clients',
+            'gerer_clients'           => 'Créer / modifier des clients Particulier',
+            'gerer_clients_societe'   => 'Créer / modifier des clients Société',
+            'gerer_clients_assurance' => 'Créer / modifier des clients Assurance',
+            'gerer_compte_credit'     => 'Activer le compte crédit, définir le plafond, accorder/révoquer crédit sur facture',
         ],
         'Véhicules' => [
             'voir_vehicules'  => 'Voir les véhicules',
@@ -47,7 +49,7 @@ class PermissionService
 
     public static array $roleDefaults = [
         'chef_garage' => [
-            'voir_clients', 'gerer_clients', 'gerer_compte_credit',
+            'voir_clients', 'gerer_clients', 'gerer_clients_societe', 'gerer_clients_assurance', 'gerer_compte_credit',
             'voir_vehicules', 'gerer_vehicules',
             'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
             'voir_devis', 'gerer_devis',
@@ -58,7 +60,7 @@ class PermissionService
             'voir_utilisateurs',
         ],
         'receptionniste' => [
-            'voir_clients', 'gerer_clients',
+            'voir_clients', 'gerer_clients', 'gerer_clients_societe', 'gerer_clients_assurance',
             'voir_vehicules', 'gerer_vehicules',
             'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
             'voir_devis',

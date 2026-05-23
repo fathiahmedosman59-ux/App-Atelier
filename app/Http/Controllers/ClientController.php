@@ -57,8 +57,31 @@ class ClientController extends Controller
      */
     public function create()
     {
-        if (! auth()->user()->hasPermission('gerer_clients')) abort(403);
-        return view('clients.create');
+        if (! auth()->user()->hasPermission('gerer_clients') &&
+            ! auth()->user()->hasPermission('gerer_clients_societe') &&
+            ! auth()->user()->hasPermission('gerer_clients_assurance')) abort(403);
+
+        $typesAutorises = $this->typesAutorises();
+        return view('clients.create', compact('typesAutorises'));
+    }
+
+    private function typesAutorises(): array
+    {
+        $u = auth()->user();
+        $types = [];
+        if ($u->hasPermission('gerer_clients'))           $types[] = 'particulier';
+        if ($u->hasPermission('gerer_clients_societe'))   $types[] = 'societe';
+        if ($u->hasPermission('gerer_clients_assurance')) $types[] = 'assurance';
+        return $types;
+    }
+
+    private function permissionPourType(string $type): string
+    {
+        return match($type) {
+            'societe'   => 'gerer_clients_societe',
+            'assurance' => 'gerer_clients_assurance',
+            default     => 'gerer_clients',
+        };
     }
 
     /**
@@ -71,9 +94,12 @@ class ClientController extends Controller
      */
     public function store(Request $request)
     {
-        if (! auth()->user()->hasPermission('gerer_clients')) abort(403);
+        $type = $request->input('type', 'particulier');
+        if (! auth()->user()->hasPermission($this->permissionPourType($type))) {
+            abort(403, 'Vous n\'êtes pas autorisé à créer un client de ce type.');
+        }
 
-        $typeSociete = $request->type === 'societe';
+        $typeSociete = $type === 'societe';
 
         $data = $request->validate([
             'type'          => ['required', 'in:particulier,societe,assurance'],
@@ -102,14 +128,8 @@ class ClientController extends Controller
             'email.email'             => 'L\'adresse e-mail saisie n\'est pas valide.',
         ]);
 
-        // Pour une société, le nom est la raison sociale (pour uniformiser les recherches)
         if ($typeSociete) {
             $data['nom'] = $data['raison_sociale'];
-        }
-
-        // Seul l'admin peut créer des comptes société ou assurance
-        if (in_array($data['type'], ['societe', 'assurance']) && ! auth()->user()->peutGererClientSociete()) {
-            abort(403, 'La création d\'un compte société ou assurance est réservée à l\'administrateur.');
         }
 
         // Le compte crédit et son plafond sont réservés aux utilisateurs avec gerer_compte_credit
@@ -144,11 +164,10 @@ class ClientController extends Controller
      */
     public function edit(Client $client)
     {
-        if (! auth()->user()->hasPermission('gerer_clients')) abort(403);
-        if (in_array($client->type, ['societe', 'assurance']) && ! auth()->user()->peutGererClientSociete()) {
-            abort(403, 'La modification d\'un compte société ou assurance est réservée à l\'administrateur.');
-        }
-        return view('clients.edit', compact('client'));
+        if (! auth()->user()->hasPermission($this->permissionPourType($client->type))) abort(403);
+
+        $typesAutorises = $this->typesAutorises();
+        return view('clients.edit', compact('client', 'typesAutorises'));
     }
 
     /**
@@ -157,12 +176,10 @@ class ClientController extends Controller
      */
     public function update(Request $request, Client $client)
     {
-        if (! auth()->user()->hasPermission('gerer_clients')) abort(403);
-        if (in_array($client->type, ['societe', 'assurance']) && ! auth()->user()->peutGererClientSociete()) {
-            abort(403, 'La modification d\'un compte société ou assurance est réservée à l\'administrateur.');
-        }
+        $type = $request->input('type', $client->type);
+        if (! auth()->user()->hasPermission($this->permissionPourType($type))) abort(403);
 
-        $typeSociete = $request->type === 'societe';
+        $typeSociete = $type === 'societe';
 
         $data = $request->validate([
             'type'          => ['required', 'in:particulier,societe,assurance'],
@@ -193,10 +210,6 @@ class ClientController extends Controller
 
         if ($typeSociete) {
             $data['nom'] = $data['raison_sociale'];
-        }
-
-        if (in_array($data['type'], ['societe', 'assurance']) && ! auth()->user()->peutGererClientSociete()) {
-            abort(403, 'La modification d\'un compte société ou assurance est réservée à l\'administrateur.');
         }
 
         // Modification du compte crédit réservée aux utilisateurs avec gerer_compte_credit
