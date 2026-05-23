@@ -449,7 +449,7 @@ class OrdreReparationController extends Controller
      */
     public function restitution(OrdreReparation $ordresReparation)
     {
-        if (! (auth()->user()->isReceptionniste() || auth()->user()->isAdmin())) abort(403);
+        if (! auth()->user()->hasPermission('restituer_vehicule')) abort(403);
         $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien']);
         return view('ordres-reparations.restitution', ['or' => $ordresReparation]);
     }
@@ -462,7 +462,7 @@ class OrdreReparationController extends Controller
      */
     public function restituer(Request $request, OrdreReparation $ordresReparation)
     {
-        if (! (auth()->user()->isReceptionniste() || auth()->user()->isAdmin())) abort(403);
+        if (! auth()->user()->hasPermission('restituer_vehicule')) abort(403);
 
         $request->validate([
             'kilometrage_sortie'     => ['required', 'integer', 'min:0'],

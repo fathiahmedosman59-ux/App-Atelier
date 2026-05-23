@@ -112,9 +112,10 @@ class ClientController extends Controller
             abort(403, 'La création d\'un compte société ou assurance est réservée à l\'administrateur.');
         }
 
-        // Le compte crédit et son plafond sont réservés à l'admin
-        $data['compte_actif']   = auth()->user()->isAdmin() ? (bool) $request->boolean('compte_actif') : false;
-        $data['plafond_compte'] = auth()->user()->isAdmin() && $request->filled('plafond_compte') ? $request->plafond_compte : null;
+        // Le compte crédit et son plafond sont réservés aux utilisateurs avec gerer_compte_credit
+        $peutCredit = auth()->user()->hasPermission('gerer_compte_credit');
+        $data['compte_actif']   = $peutCredit ? (bool) $request->boolean('compte_actif') : false;
+        $data['plafond_compte'] = $peutCredit && $request->filled('plafond_compte') ? $request->plafond_compte : null;
 
         $client = Client::create($data);
         Activite::journaliser('creer_client', "Création client {$client->type} : {$client->nom_complet}", $client);
@@ -198,8 +199,8 @@ class ClientController extends Controller
             abort(403, 'La modification d\'un compte société ou assurance est réservée à l\'administrateur.');
         }
 
-        // Seul l'admin peut modifier le compte crédit et son plafond
-        if (auth()->user()->isAdmin()) {
+        // Modification du compte crédit réservée aux utilisateurs avec gerer_compte_credit
+        if (auth()->user()->hasPermission('gerer_compte_credit')) {
             $data['compte_actif']   = $request->boolean('compte_actif');
             $data['plafond_compte'] = $request->filled('plafond_compte') ? $request->plafond_compte : null;
         }

@@ -26,6 +26,8 @@ class UtilisateurController extends Controller
      */
     public function index()
     {
+        if (! auth()->user()->hasPermission('voir_utilisateurs')) abort(403);
+
         $utilisateurs = User::orderBy('name')->get();
 
         return view('utilisateurs.index', compact('utilisateurs'));
@@ -37,6 +39,8 @@ class UtilisateurController extends Controller
      */
     public function update(Request $request, User $utilisateur)
     {
+        if (! auth()->user()->hasPermission('gerer_utilisateurs')) abort(403);
+
         $request->validate([
             'name'  => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($utilisateur->id)],
@@ -64,6 +68,8 @@ class UtilisateurController extends Controller
      */
     public function resetPassword(Request $request, User $utilisateur)
     {
+        if (! auth()->user()->hasPermission('gerer_utilisateurs')) abort(403);
+
         $request->validate([
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ], [
@@ -86,6 +92,8 @@ class UtilisateurController extends Controller
      */
     public function destroy(User $utilisateur)
     {
+        if (! auth()->user()->hasPermission('gerer_utilisateurs')) abort(403);
+
         if ($utilisateur->id === auth()->id()) {
             return back()->with('error', 'Vous ne pouvez pas supprimer votre propre compte.');
         }

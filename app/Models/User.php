@@ -109,16 +109,16 @@ class User extends Authenticatable
         return in_array($this->role, ['admin', 'chef_garage']);
     }
 
-    /** Seul l'admin peut créer/modifier des clients société ou assurance (compte facturation) */
+    /** Peut créer/modifier des clients société ou assurance (compte crédit) */
     public function peutGererClientSociete(): bool
     {
-        return $this->role === 'admin';
+        return $this->isAdmin() || $this->hasPermission('gerer_compte_credit');
     }
 
-    /** Peut voir et gérer les bons de commande pièces (magasinier, chef, admin) */
+    /** Peut voir et gérer les bons de commande pièces */
     public function peutGererBonsCommande(): bool
     {
-        return in_array($this->role, ['admin', 'chef_garage', 'magasinier']);
+        return $this->isAdmin() || $this->hasPermission('gerer_bons_commande');
     }
 
     // ── Labels et couleurs pour l'affichage ────────────────────────────

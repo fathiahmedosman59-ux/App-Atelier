@@ -10,6 +10,8 @@ class ActiviteController extends Controller
 {
     public function index(Request $request)
     {
+        if (! auth()->user()->hasPermission('voir_activites')) abort(403);
+
         $query = Activite::orderByDesc('created_at');
 
         if ($userId = $request->get('user_id')) {

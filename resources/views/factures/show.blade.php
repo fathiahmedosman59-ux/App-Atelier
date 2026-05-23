@@ -58,7 +58,7 @@
                 <span class="text-xs text-indigo-600 ml-1">— accordé le {{ $facture->credit_accorde_at?->format('d/m/Y à H:i') }}</span>
             </div>
         </div>
-        @if(auth()->user()->isCaissier() || auth()->user()->isAdmin())
+        @if(auth()->user()->hasPermission('gerer_compte_credit'))
         <form method="POST" action="{{ route('factures.revoquer-credit', $facture) }}" onsubmit="return confirm('Révoquer le crédit ?')">
             @csrf @method('PATCH')
             <button type="submit" class="text-xs text-red-600 hover:text-red-800 font-medium underline">Révoquer</button>
@@ -126,7 +126,7 @@
     </div>
 
     {{-- Bouton crédit : uniquement si le client a un compte crédit autorisé --}}
-    @if($facture->client->compte_actif && !$facture->credit_accorde && (auth()->user()->isCaissier() || auth()->user()->isAdmin()))
+    @if($facture->client->compte_actif && !$facture->credit_accorde && (auth()->user()->hasPermission('gerer_compte_credit')))
     <div class="mt-3 border-t border-gray-100 pt-3">
         <p class="text-xs text-slate-400 mb-2">Si le client ne peut pas payer maintenant :</p>
         <form method="POST" action="{{ route('factures.credit', $facture) }}" onsubmit="return confirm('Accorder un crédit ? Le véhicule pourra être restitué sans paiement immédiat.')">

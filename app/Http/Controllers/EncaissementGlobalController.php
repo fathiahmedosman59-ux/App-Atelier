@@ -24,6 +24,8 @@ class EncaissementGlobalController extends Controller
      */
     public function index()
     {
+        if (! auth()->user()->hasPermission('voir_encaissements')) abort(403);
+
         $encaissements = EncaissementGlobal::with('client')
             ->orderByDesc('created_at')
             ->paginate(30);
@@ -39,6 +41,8 @@ class EncaissementGlobalController extends Controller
      */
     public function create(Request $request)
     {
+        if (! auth()->user()->hasPermission('gerer_encaissements')) abort(403);
+
         $clientId = $request->query('client_id');
         $client   = null;
 
@@ -71,6 +75,7 @@ class EncaissementGlobalController extends Controller
      */
     public function store(Request $request)
     {
+        if (! auth()->user()->hasPermission('gerer_encaissements')) abort(403);
         $request->validate([
             'client_id'      => 'required|exists:clients,id',
             'facture_ids'    => 'required|array|min:1',

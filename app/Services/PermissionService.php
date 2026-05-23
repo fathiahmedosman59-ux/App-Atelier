@@ -6,49 +6,62 @@ class PermissionService
 {
     public static array $groups = [
         'Clients' => [
-            'voir_clients'  => 'Voir les clients',
-            'gerer_clients' => 'Créer / modifier / supprimer les clients',
+            'voir_clients'       => 'Voir les clients',
+            'gerer_clients'      => 'Créer / modifier / supprimer les clients',
+            'gerer_compte_credit'=> 'Activer le compte crédit, définir le plafond, accorder/révoquer crédit sur facture',
         ],
         'Véhicules' => [
             'voir_vehicules'  => 'Voir les véhicules',
             'gerer_vehicules' => 'Créer / modifier les véhicules',
         ],
         'Ordres de réparation' => [
-            'voir_ordres'  => 'Voir les ordres de réparation',
-            'gerer_ordres' => 'Gérer les ordres de réparation',
+            'voir_ordres'      => 'Voir les ordres de réparation',
+            'gerer_ordres'     => 'Créer, modifier, affecter, changer le statut des OR',
+            'restituer_vehicule' => 'Restituer le véhicule au client',
         ],
         'Devis' => [
             'voir_devis'  => 'Voir les devis',
-            'gerer_devis' => 'Créer / gérer les devis',
+            'gerer_devis' => 'Créer / modifier / supprimer les devis',
         ],
         'Factures' => [
             'voir_factures'  => 'Voir les factures',
-            'gerer_factures' => 'Créer / gérer les factures',
+            'gerer_factures' => 'Créer la facture et enregistrer les paiements',
         ],
         'Bons de commande' => [
             'voir_bons_commande'  => 'Voir les bons de commande',
-            'gerer_bons_commande' => 'Gérer les bons de commande',
+            'gerer_bons_commande' => 'Gérer et réceptionner les bons de commande',
+        ],
+        'Encaissements globaux' => [
+            'voir_encaissements'  => 'Voir les encaissements globaux (comptes clients)',
+            'gerer_encaissements' => 'Créer et valider les encaissements globaux',
         ],
         'Rapports' => [
-            'voir_rapports' => 'Voir les rapports',
+            'voir_rapports'  => 'Voir les rapports et statistiques',
+            'voir_activites' => 'Voir le journal d\'activités',
+        ],
+        'Utilisateurs' => [
+            'voir_utilisateurs'  => 'Voir la liste des utilisateurs',
+            'gerer_utilisateurs' => 'Créer / modifier / supprimer les utilisateurs et leurs permissions',
         ],
     ];
 
     public static array $roleDefaults = [
         'chef_garage' => [
-            'voir_clients', 'gerer_clients',
+            'voir_clients', 'gerer_clients', 'gerer_compte_credit',
             'voir_vehicules', 'gerer_vehicules',
-            'voir_ordres', 'gerer_ordres',
+            'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
             'voir_devis', 'gerer_devis',
             'voir_factures', 'gerer_factures',
             'voir_bons_commande', 'gerer_bons_commande',
-            'voir_rapports',
+            'voir_encaissements',
+            'voir_rapports', 'voir_activites',
+            'voir_utilisateurs',
         ],
         'receptionniste' => [
             'voir_clients', 'gerer_clients',
             'voir_vehicules', 'gerer_vehicules',
-            'voir_ordres', 'gerer_ordres',
-            'voir_devis', 'gerer_devis',
+            'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
+            'voir_devis',
         ],
         'mecanicien' => [
             'voir_clients',
@@ -62,9 +75,10 @@ class PermissionService
             'voir_bons_commande', 'gerer_bons_commande',
         ],
         'caissier' => [
-            'voir_clients',
+            'voir_clients', 'gerer_compte_credit',
             'voir_ordres',
             'voir_factures', 'gerer_factures',
+            'voir_encaissements', 'gerer_encaissements',
         ],
     ];
 

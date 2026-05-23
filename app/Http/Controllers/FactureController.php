@@ -259,7 +259,7 @@ class FactureController extends Controller
      */
     public function accorderCredit(Request $request, Facture $facture)
     {
-        if (! auth()->user()->isCaissier() && ! auth()->user()->isAdmin()) abort(403);
+        if (! auth()->user()->hasPermission('gerer_compte_credit')) abort(403);
 
         $client         = $facture->client;
         $montantRestant = $facture->getMontantRestant();
@@ -286,7 +286,7 @@ class FactureController extends Controller
      */
     public function revoquerCredit(Facture $facture)
     {
-        if (! auth()->user()->isCaissier() && ! auth()->user()->isAdmin()) abort(403);
+        if (! auth()->user()->hasPermission('gerer_compte_credit')) abort(403);
 
         $facture->update([
             'credit_accorde'     => false,
