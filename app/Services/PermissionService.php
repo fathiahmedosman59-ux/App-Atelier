@@ -17,8 +17,12 @@ class PermissionService
             'gerer_vehicules' => 'Créer / modifier les véhicules',
         ],
         'Ordres de réparation' => [
-            'voir_ordres'      => 'Voir les ordres de réparation',
-            'gerer_ordres'     => 'Créer, modifier, affecter, changer le statut des OR',
+            'voir_ordres'        => 'Voir les ordres de réparation',
+            'creer_ordres'       => 'Créer une nouvelle réception (OR)',
+            'gerer_ordres'       => 'Modifier les OR, changer le statut, gérer la garantie',
+            'affecter_technicien'=> 'Affecter un technicien à un OR',
+            'valider_qualite'    => 'Valider le contrôle qualité',
+            'valider_lavage'     => 'Valider le lavage du véhicule',
             'restituer_vehicule' => 'Restituer le véhicule au client',
         ],
         'Devis' => [
@@ -51,7 +55,7 @@ class PermissionService
         'chef_garage' => [
             'voir_clients', 'gerer_clients', 'gerer_clients_societe', 'gerer_clients_assurance', 'gerer_compte_credit',
             'voir_vehicules', 'gerer_vehicules',
-            'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
+            'voir_ordres', 'creer_ordres', 'gerer_ordres', 'affecter_technicien', 'valider_qualite', 'valider_lavage', 'restituer_vehicule',
             'voir_devis', 'gerer_devis',
             'voir_factures', 'gerer_factures',
             'voir_bons_commande', 'gerer_bons_commande',
@@ -62,7 +66,7 @@ class PermissionService
         'receptionniste' => [
             'voir_clients', 'gerer_clients', 'gerer_clients_societe', 'gerer_clients_assurance',
             'voir_vehicules', 'gerer_vehicules',
-            'voir_ordres', 'gerer_ordres', 'restituer_vehicule',
+            'voir_ordres', 'creer_ordres', 'restituer_vehicule',
             'voir_devis',
         ],
         'mecanicien' => [

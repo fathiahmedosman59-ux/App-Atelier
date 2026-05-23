@@ -107,7 +107,7 @@ class OrdreReparationController extends Controller
      */
     public function store(Request $request)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+        if (! auth()->user()->hasPermission('creer_ordres')) abort(403);
 
         $data = $request->validate([
             'client_id'              => ['required', 'exists:clients,id'],
@@ -310,7 +310,7 @@ class OrdreReparationController extends Controller
      */
     public function validerQualite(OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+        if (! auth()->user()->hasPermission('valider_qualite')) abort(403);
 
         $ordresReparation->update(['statut' => 'lavage']);
         return back()->with('success', 'Contrôle qualité validé — véhicule en lavage.');
@@ -322,7 +322,7 @@ class OrdreReparationController extends Controller
      */
     public function terminerLavage(OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+        if (! auth()->user()->hasPermission('valider_lavage')) abort(403);
 
         $ordresReparation->update(['statut' => 'pret']);
         return back()->with('success', 'Lavage terminé — véhicule prêt, client peut être contacté.');
@@ -368,7 +368,7 @@ class OrdreReparationController extends Controller
      */
     public function affecter(Request $request, OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+        if (! auth()->user()->hasPermission('affecter_technicien')) abort(403);
 
         // Bloquer si un BC pièces existe et n'est pas encore entièrement reçu
         $bcEnAttente = $ordresReparation->bonsCommande()
