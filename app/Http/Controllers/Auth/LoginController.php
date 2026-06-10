@@ -31,6 +31,8 @@ class LoginController extends Controller
             return redirect()->intended(route('dashboard'));
         }
 
+        Activite::journaliser('connexion_echec', "Tentative de connexion échouée pour l'adresse : {$request->email}");
+
         return back()->withErrors([
             'email' => 'Email ou mot de passe incorrect.',
         ])->onlyInput('email');

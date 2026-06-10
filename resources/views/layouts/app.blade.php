@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Tableau de bord') — App Atelier</title>
     {{-- Appliqué AVANT le rendu pour éviter le flash --}}
     <script>
@@ -280,6 +281,75 @@ function toggleOrMenu() {
 document.addEventListener('DOMContentLoaded', function() {
     updateThemeIcons(document.documentElement.classList.contains('dark'));
 });
+</script>
+
+{{-- ═══ MODALE D'EXPIRATION DE SESSION ═════════════════════════ --}}
+<div id="idle-warning" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+        <div class="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-7 h-7 text-orange-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </div>
+        <h2 class="text-lg font-bold text-slate-800 mb-2">Session bientôt expirée</h2>
+        <p class="text-sm text-slate-500 mb-5">
+            Vous serez déconnecté dans
+            <span id="idle-countdown" class="font-bold text-orange-500 text-base">60</span>
+            secondes en raison d'inactivité.
+        </p>
+        <button onclick="idleReset()"
+                class="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 rounded-xl transition-colors">
+            Rester connecté
+        </button>
+    </div>
+</div>
+
+<form id="idle-logout-form" method="POST" action="{{ route('logout') }}" class="hidden">
+    @csrf
+</form>
+
+<script>
+(function() {
+    var TIMEOUT = 600;   // 10 minutes
+    var WARNING = 60;    // Avertir 60 s avant
+    var idle    = 0;
+    var warned  = false;
+
+    function reset() {
+        idle   = 0;
+        if (warned) {
+            document.getElementById('idle-warning').classList.add('hidden');
+            warned = false;
+        }
+    }
+
+    window.idleReset = reset;
+
+    ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(function(e) {
+        document.addEventListener(e, reset, { passive: true });
+    });
+
+    setInterval(function() {
+        idle++;
+        var remaining = TIMEOUT - idle;
+
+        if (idle >= TIMEOUT) {
+            // Marquer URL pour afficher le message sur la page login
+            sessionStorage.setItem('session_expired', '1');
+            document.getElementById('idle-logout-form').submit();
+            return;
+        }
+
+        if (remaining <= WARNING) {
+            document.getElementById('idle-countdown').textContent = remaining;
+            if (!warned) {
+                document.getElementById('idle-warning').classList.remove('hidden');
+                warned = true;
+            }
+        }
+    }, 1000);
+})();
 </script>
 
 </body>

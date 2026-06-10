@@ -75,6 +75,16 @@
                 <p class="text-slate-500">Bienvenue, veuillez entrer vos identifiants.</p>
             </div>
 
+            {{-- Message expiration session (serveur ou JS) --}}
+            @if(session('timeout'))
+            <div class="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-sm text-amber-800">{{ session('timeout') }}</p>
+            </div>
+            @endif
+
             {{-- Erreurs générales --}}
             @if ($errors->any())
             <div class="mb-5 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
@@ -163,5 +173,17 @@ function togglePassword() {
     const input = document.getElementById('password');
     input.type = input.type === 'password' ? 'text' : 'password';
 }
+
+// Afficher le bandeau si le JS a déclenché l'expiration
+(function() {
+    if (sessionStorage.getItem('session_expired')) {
+        sessionStorage.removeItem('session_expired');
+        var div = document.createElement('div');
+        div.className = 'mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3';
+        div.innerHTML = '<svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p class="text-sm text-amber-800">Votre session a expiré après 10 minutes d\'inactivité. Veuillez vous reconnecter.</p>';
+        var form = document.querySelector('form');
+        form && form.parentNode.insertBefore(div, form);
+    }
+})();
 </script>
 @endsection

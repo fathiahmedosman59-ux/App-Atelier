@@ -12,11 +12,25 @@ class SecurityHeaders
     {
         $response = $next($request);
 
+        // Anti-clickjacking : aucun iframe autorisé
+        $response->headers->set('X-Frame-Options', 'DENY');
+        // Empêche le MIME sniffing
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
+        // XSS filter navigateur (legacy)
         $response->headers->set('X-XSS-Protection', '1; mode=block');
+        // Ne pas envoyer l'URL complète en Referer vers d'autres domaines
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        // Désactiver les APIs navigateur inutiles
+        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        // Aucun accès cross-domain aux ressources Flash / PDF
+        $response->headers->set('X-Permitted-Cross-Domain-Policies', 'none');
+
+        // Pages authentifiées : interdire la mise en cache navigateur (bouton Précédent)
+        if (auth()->check()) {
+            $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            $response->headers->set('Pragma', 'no-cache');
+            $response->headers->set('Expires', '0');
+        }
 
         return $response;
     }
