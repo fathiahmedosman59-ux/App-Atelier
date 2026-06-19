@@ -168,8 +168,16 @@
                         Réceptionniste
                     </button>
                     <button type="button" onclick="setRole('magasinier')" id="role-magasinier"
-                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600 col-span-2">
+                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
                         Magasinier
+                    </button>
+                    <button type="button" onclick="setRole('caissier')" id="role-caissier"
+                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
+                        Caissier
+                    </button>
+                    <button type="button" onclick="setRole('responsable_garantie')" id="role-responsable_garantie"
+                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600 col-span-2">
+                        Responsable Garantie
                     </button>
                 </div>
                 <input type="hidden" name="role" id="edit-role">
@@ -265,7 +273,7 @@ function fermerEdit() {
 
 function setRole(role) {
     document.getElementById('edit-role').value = role;
-    ['admin','chef_garage','mecanicien','receptionniste','magasinier'].forEach(function(r) {
+    ['admin','chef_garage','mecanicien','receptionniste','magasinier','caissier','responsable_garantie'].forEach(function(r) {
         var btn = document.getElementById('role-' + r);
         if (r === role) {
             btn.className = 'py-2 rounded-xl border text-sm font-semibold transition-colors border-orange-500 bg-orange-50 text-orange-700';

@@ -140,10 +140,21 @@
                     <span class="text-sm font-medium text-slate-700">Véhicule sous garantie constructeur</span>
                 </label>
             </div>
-            <div id="fin_garantie_block" class="{{ old('sous_garantie', $vehicule?->sous_garantie) ? '' : 'hidden' }} col-span-2">
-                <label class="block text-sm font-medium text-slate-700 mb-1.5">Fin de garantie</label>
-                <input type="date" name="fin_garantie" value="{{ old('fin_garantie', $vehicule?->fin_garantie?->format('Y-m-d')) }}"
-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+            <div id="fin_garantie_block" class="{{ old('sous_garantie', $vehicule?->sous_garantie) ? '' : 'hidden' }} col-span-2 grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">Fin de garantie</label>
+                    <input type="date" name="fin_garantie" value="{{ old('fin_garantie', $vehicule?->fin_garantie?->format('Y-m-d')) }}"
+                           class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                        Équipements couverts par la garantie
+                        <span class="text-slate-400 font-normal text-xs ml-1">(varie selon le contrat)</span>
+                    </label>
+                    <textarea name="garantie_couverture" rows="2"
+                              placeholder="Ex : Moteur, boîte de vitesses, climatisation, électronique embarquée..."
+                              class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none">{{ old('garantie_couverture', $vehicule?->garantie_couverture) }}</textarea>
+                </div>
             </div>
         </div>
     </div>

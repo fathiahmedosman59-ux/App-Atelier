@@ -21,7 +21,7 @@ class Vehicule extends Model
         'client_id', 'immatriculation', 'vin', 'marque', 'modele', 'version',
         'annee', 'couleur', 'motorisation', 'cylindree', 'puissance_fiscale',
         'kilometrage', 'date_mise_circulation', 'date_expiration_assurance',
-        'date_expiration_vignette', 'sous_garantie', 'fin_garantie', 'notes',
+        'date_expiration_vignette', 'sous_garantie', 'fin_garantie', 'garantie_couverture', 'notes',
     ];
 
     protected $casts = [

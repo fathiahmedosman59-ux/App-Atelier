@@ -92,6 +92,7 @@
                     <option value="receptionniste" {{ old('role') === 'receptionniste' ? 'selected' : '' }}>Réceptionniste</option>
                     <option value="magasinier" {{ old('role') === 'magasinier' ? 'selected' : '' }}>Magasinier</option>
                     <option value="caissier" {{ old('role') === 'caissier' ? 'selected' : '' }}>Caissier</option>
+                    <option value="responsable_garantie" {{ old('role') === 'responsable_garantie' ? 'selected' : '' }}>Responsable Garantie</option>
                 </select>
 
                 <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
@@ -118,6 +119,10 @@
                     <div class="bg-gray-50 rounded-lg p-2 border">
                         <p class="font-medium text-slate-700">Caissier</p>
                         <p>Facturation, restitution clés</p>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-2 border border-yellow-200 col-span-2">
+                        <p class="font-medium text-yellow-800">Responsable Garantie</p>
+                        <p class="text-yellow-700">Traitement des demandes de garantie (approbation / refus)</p>
                     </div>
                 </div>
             </div>

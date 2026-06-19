@@ -90,6 +90,7 @@ class VehiculeController extends Controller
             'date_expiration_vignette'   => ['nullable', 'date'],
             'sous_garantie'              => ['boolean'],
             'fin_garantie'               => ['nullable', 'date'],
+            'garantie_couverture'        => ['nullable', 'string'],
             'notes'                      => ['nullable', 'string'],
         ], [
             'client_id.required'         => 'Veuillez sélectionner un client.',
@@ -173,6 +174,7 @@ class VehiculeController extends Controller
             'date_expiration_vignette'   => ['nullable', 'date'],
             'sous_garantie'              => ['boolean'],
             'fin_garantie'               => ['nullable', 'date'],
+            'garantie_couverture'        => ['nullable', 'string'],
             'notes'                      => ['nullable', 'string'],
         ], [
             'client_id.required'         => 'Veuillez sélectionner un client.',

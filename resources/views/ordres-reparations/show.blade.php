@@ -546,7 +546,7 @@
         <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
             <p class="text-sm text-yellow-800 font-medium">⏳ En attente de validation</p>
         </div>
-        @if(auth()->user()->canManageWorkshop())
+        @if(auth()->user()->hasPermission('traiter_garanties'))
         <form method="POST" action="{{ route('ordres-reparations.garantie', $or) }}" class="space-y-3">
             @csrf @method('PATCH')
             <div class="grid grid-cols-2 gap-3">

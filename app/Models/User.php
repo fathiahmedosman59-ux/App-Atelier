@@ -13,12 +13,13 @@ use Illuminate\Notifications\Notifiable;
  * Modèle User — Compte utilisateur du personnel.
  *
  * Rôles disponibles et leurs responsabilités :
- *   - admin          : accès total, gestion des utilisateurs et permissions
- *   - chef_garage    : gestion des OR, affectation des mécaniciens, devis
- *   - mecanicien     : exécution des travaux, accès à sa feuille de travail
- *   - receptionniste : création des OR, restitution des véhicules
- *   - magasinier     : gestion des bons de commande pièces
- *   - caissier       : facturation, encaissement, accord de crédit
+ *   - admin                  : accès total, gestion des utilisateurs et permissions
+ *   - chef_garage            : gestion des OR, affectation des mécaniciens, devis
+ *   - mecanicien             : exécution des travaux, accès à sa feuille de travail
+ *   - receptionniste         : création des OR, restitution des véhicules
+ *   - magasinier             : gestion des bons de commande pièces
+ *   - caissier               : facturation, encaissement, accord de crédit
+ *   - responsable_garantie   : traitement des demandes de garantie (approbation / refus)
  *
  * Le système de permissions fonctionne en deux couches :
  *   1. Permissions par défaut selon le rôle (PermissionService::$roleDefaults)
@@ -101,6 +102,9 @@ class User extends Authenticatable
     /** Vérifie si l'utilisateur est caissier */
     public function isCaissier(): bool      { return $this->role === 'caissier'; }
 
+    /** Vérifie si l'utilisateur est responsable garantie */
+    public function isResponsableGarantie(): bool { return $this->role === 'responsable_garantie'; }
+
     // ── Droits métier spéciaux ─────────────────────────────────────────
 
     /** Admin OU chef de garage : gestion complète de l'atelier (OR, affectations) */
@@ -127,13 +131,14 @@ class User extends Authenticatable
     public function getRoleLabel(): string
     {
         return match($this->role) {
-            'admin'          => 'Administrateur',
-            'chef_garage'    => 'Chef de garage',
-            'mecanicien'     => 'Mécanicien',
-            'receptionniste' => 'Réceptionniste',
-            'magasinier'     => 'Magasinier',
-            'caissier'       => 'Caissier',
-            default          => 'Inconnu',
+            'admin'                => 'Administrateur',
+            'chef_garage'          => 'Chef de garage',
+            'mecanicien'           => 'Mécanicien',
+            'receptionniste'       => 'Réceptionniste',
+            'magasinier'           => 'Magasinier',
+            'caissier'             => 'Caissier',
+            'responsable_garantie' => 'Responsable Garantie',
+            default                => 'Inconnu',
         };
     }
 
@@ -141,13 +146,22 @@ class User extends Authenticatable
     public function getRoleColor(): string
     {
         return match($this->role) {
-            'admin'          => 'orange',
-            'chef_garage'    => 'purple',
-            'mecanicien'     => 'blue',
-            'receptionniste' => 'green',
-            'magasinier'     => 'teal',
-            'caissier'       => 'indigo',
-            default          => 'gray',
+            'admin'                => 'orange',
+            'chef_garage'          => 'purple',
+            'mecanicien'           => 'blue',
+            'receptionniste'       => 'green',
+            'magasinier'           => 'teal',
+            'caissier'             => 'indigo',
+            'responsable_garantie' => 'yellow',
+            default                => 'gray',
         };
+    }
+
+    /** Nombre de notifications non lues */
+    public function notificationsNonLues(): int
+    {
+        return \App\Models\NotificationInterne::where('destinataire_id', $this->id)
+            ->whereNull('lu_at')
+            ->count();
     }
 }

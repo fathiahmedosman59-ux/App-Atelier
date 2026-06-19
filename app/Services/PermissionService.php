@@ -42,6 +42,10 @@ class PermissionService
             'voir_encaissements'  => 'Voir les encaissements globaux (comptes clients)',
             'gerer_encaissements' => 'Créer et valider les encaissements globaux',
         ],
+        'Garantie' => [
+            'voir_garanties'    => 'Voir les demandes de garantie',
+            'traiter_garanties' => 'Approuver ou refuser les demandes de garantie',
+        ],
         'Rapports' => [
             'voir_rapports'  => 'Voir les rapports et statistiques',
             'voir_activites' => 'Voir le journal d\'activités',
@@ -61,8 +65,15 @@ class PermissionService
             'voir_factures', 'creer_factures', 'encaisser_factures',
             'voir_bons_commande', 'gerer_bons_commande',
             'voir_encaissements',
+            'voir_garanties', 'traiter_garanties',
             'voir_rapports', 'voir_activites',
             'voir_utilisateurs',
+        ],
+        'responsable_garantie' => [
+            'voir_clients',
+            'voir_vehicules',
+            'voir_ordres',
+            'voir_garanties', 'traiter_garanties',
         ],
         'receptionniste' => [
             'voir_clients', 'gerer_clients', 'gerer_clients_societe', 'gerer_clients_assurance',

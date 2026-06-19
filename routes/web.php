@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\ActiviteController;
 use App\Http\Controllers\BonCommandeController;
+use App\Http\Controllers\GarantieController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DevisController;
@@ -151,6 +152,9 @@ Route::middleware('auth')->group(function () {
         Route::patch('/bons-commande/{bonCommande}/recevoir',                      [BonCommandeController::class, 'marquerRecu'])->name('bons-commande.recevoir');
         Route::patch('/bons-commande/{bonCommande}/ligne/{ligneId}/recu',          [BonCommandeController::class, 'marquerLigneRecue'])->name('bons-commande.ligne-recu');
     });
+
+    // ── Garanties ─────────────────────────────────────────────
+    Route::get('/garanties', [GarantieController::class, 'index'])->name('garanties.index')->middleware('perm:voir_garanties');
 
     // ── Rapports ──────────────────────────────────────────────
     Route::middleware('perm:voir_rapports')->group(function () {

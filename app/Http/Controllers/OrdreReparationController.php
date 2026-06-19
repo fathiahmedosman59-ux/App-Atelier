@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Activite;
 use App\Models\Client;
+use App\Models\NotificationInterne;
 use App\Models\OrdreReparation;
 use App\Models\PhotoOr;
 use App\Models\User;
@@ -195,8 +196,16 @@ class OrdreReparationController extends Controller
             }
         }
 
-        // On trace l'action dans le journal d'activité
         Activite::journaliser('creer_or', "Création de l'OR {$or->numero} — {$or->client->nom_complet} / {$or->vehicule->immatriculation}", $or);
+
+        // Notifier les responsables garantie si le type est garantie
+        if ($or->type === 'garantie') {
+            NotificationInterne::notifierResponsablesGarantie(
+                titre: "Nouvelle demande de garantie — {$or->numero}",
+                corps: "Véhicule : {$or->vehicule->immatriculation} ({$or->vehicule->marque} {$or->vehicule->modele})\nClient : {$or->client->nom_complet}\nMotif : {$or->motif_entree}",
+                orId: $or->id
+            );
+        }
 
         return redirect()->route('ordres-reparations.show', $or)
             ->with('success', "Ordre de réparation {$or->numero} créé avec succès.");
@@ -513,7 +522,7 @@ class OrdreReparationController extends Controller
      */
     public function changerStatutGarantie(Request $request, OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+        if (! auth()->user()->hasPermission('traiter_garanties')) abort(403);
 
         $request->validate([
             'statut_garantie'      => ['required', 'in:approuve,refuse'],
