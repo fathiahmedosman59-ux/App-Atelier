@@ -129,7 +129,12 @@
                 @forelse($factures as $facture)
                 <tr class="hover:bg-gray-50 {{ $facture->statut === 'payee' ? 'opacity-70' : '' }}">
                     <td class="px-5 py-3 font-mono font-semibold text-slate-800">{{ $facture->numero }}</td>
-                    <td class="px-5 py-3 text-slate-700 font-medium">{{ $facture->client->nom_complet }}</td>
+                    <td class="px-5 py-3 text-slate-700 font-medium">
+                        {{ $facture->payeur_nom }}
+                        @if($facture->marque_garantie_id)
+                        <span class="ml-1 text-xs bg-indigo-100 text-indigo-700 font-semibold px-1.5 py-0.5 rounded">Garantie</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-3">
                         <a href="{{ route('ordres-reparations.show', $facture->ordreReparation) }}"
                            class="font-mono text-orange-500 hover:underline text-xs">

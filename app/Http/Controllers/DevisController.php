@@ -3,11 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Activite;
-use App\Models\BonCommande;
 use App\Models\Devis;
-use App\Models\LigneBonCommande;
+use App\Models\DossierReception;
 use App\Models\LigneDevis;
 use App\Models\OrdreReparation;
+use App\Services\DevisWorkflowService;
+use App\Services\OperationsMaintenanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -25,7 +26,7 @@ class DevisController extends Controller
      */
     public function index()
     {
-        $devis = Devis::with(['ordreReparation.client', 'ordreReparation.vehicule'])
+        $devis = Devis::with(['ordreReparation.client', 'ordreReparation.vehicule', 'dossier.client', 'dossier.vehicule'])
             ->latest()
             ->paginate(25);
         return view('devis.index', compact('devis'));
@@ -38,7 +39,32 @@ class DevisController extends Controller
     public function create(OrdreReparation $ordresReparation)
     {
         if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
-        return view('devis.create', ['or' => $ordresReparation]);
+        return view('devis.create', [
+            'parent'                => $ordresReparation,
+            'parentLabel'           => 'Ordre de réparation',
+            'formAction'            => route('devis.store', $ordresReparation),
+            'backHref'              => route('ordres-reparations.show', $ordresReparation),
+            'operationsMaintenance' => OperationsMaintenanceService::liste(),
+            'dureesOperations'      => OperationsMaintenanceService::dureesParDesignation(),
+        ]);
+    }
+
+    /**
+     * Affiche le formulaire de création d'un devis pour un dossier de réception
+     * (avant que l'OR n'existe — cf. DossierReception).
+     * Réservé aux utilisateurs avec la permission 'gerer_devis' (chef de garage, admin).
+     */
+    public function createPourDossier(DossierReception $dossier)
+    {
+        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        return view('devis.create', [
+            'parent'                => $dossier,
+            'parentLabel'           => 'Dossier de réception',
+            'formAction'            => route('dossiers-reception.devis.store', $dossier),
+            'backHref'              => route('dossiers-reception.show', $dossier),
+            'operationsMaintenance' => OperationsMaintenanceService::liste(),
+            'dureesOperations'      => OperationsMaintenanceService::dureesParDesignation(),
+        ]);
     }
 
     /**
@@ -82,7 +108,7 @@ class DevisController extends Controller
         ]);
 
         // Transaction : si une étape échoue, aucune donnée n'est enregistrée
-        DB::transaction(function () use ($request, $ordresReparation) {
+        $devis = DB::transaction(function () use ($request, $ordresReparation) {
             $devis = Devis::create([
                 'numero'   => Devis::genererNumero(),
                 'or_id'    => $ordresReparation->id,
@@ -111,9 +137,90 @@ class DevisController extends Controller
             $devis->recalculer();
             $ordresReparation->update(['statut' => 'diagnostic']);
             Activite::journaliser('creer_devis', "Création du devis {$devis->numero} pour l'OR {$ordresReparation->numero}", $devis);
+
+            return $devis;
         });
 
+        // Envoi immédiat au fournisseur (hors transaction — appel HTTP externe)
+        // pour que prix de vente et disponibilité reviennent avant validation.
+        $devis->load('lignes');
+        DevisWorkflowService::genererBonCommande($devis);
+
         return redirect()->route('ordres-reparations.show', $ordresReparation)
+            ->with('success', 'Devis créé avec succès.');
+    }
+
+    /**
+     * Enregistre un nouveau devis rattaché à un dossier de réception (avant OR).
+     * Même validation et calcul que store(), mais rattache le devis au dossier
+     * et passe son statut à "devis_en_cours" au lieu de créer un OR.
+     */
+    public function storePourDossier(Request $request, DossierReception $dossier)
+    {
+        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        $request->validate([
+            'taux_tva'               => ['required', 'numeric', 'min:0', 'max:100'],
+            'notes'                  => ['nullable', 'string'],
+            'lignes'                 => ['required', 'array', 'min:1'],
+            'lignes.*.type'          => ['required', 'in:main_oeuvre,piece,forfait,autre'],
+            'lignes.*.designation'   => ['required', 'string'],
+            'lignes.*.reference'     => ['nullable', 'string', 'max:100'],
+            'lignes.*.quantite'      => ['required', 'numeric', 'min:0.01'],
+            'lignes.*.prix_unitaire' => ['required', 'numeric', 'min:0'],
+            'lignes.*.remise'        => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ], [
+            'taux_tva.required'            => 'Le taux de TVA est obligatoire.',
+            'taux_tva.numeric'             => 'Le taux de TVA doit être un nombre.',
+            'taux_tva.min'                 => 'Le taux de TVA ne peut pas être négatif.',
+            'taux_tva.max'                 => 'Le taux de TVA ne peut pas dépasser 100%.',
+            'lignes.required'              => 'Le devis doit contenir au moins une ligne.',
+            'lignes.min'                   => 'Le devis doit contenir au moins une ligne.',
+            'lignes.*.type.required'       => 'Veuillez sélectionner le type pour chaque ligne.',
+            'lignes.*.type.in'             => 'Le type de ligne sélectionné est invalide.',
+            'lignes.*.designation.required'=> 'La désignation est obligatoire pour chaque ligne.',
+            'lignes.*.quantite.required'   => 'La quantité est obligatoire pour chaque ligne.',
+            'lignes.*.quantite.min'        => 'La quantité doit être supérieure à zéro.',
+            'lignes.*.prix_unitaire.required' => 'Le prix unitaire est obligatoire pour chaque ligne.',
+            'lignes.*.prix_unitaire.min'   => 'Le prix unitaire ne peut pas être négatif.',
+            'lignes.*.remise.min'          => 'La remise ne peut pas être négative.',
+            'lignes.*.remise.max'          => 'La remise ne peut pas dépasser 100%.',
+        ]);
+
+        $devis = DB::transaction(function () use ($request, $dossier) {
+            $devis = Devis::create([
+                'numero'     => Devis::genererNumero(),
+                'dossier_id' => $dossier->id,
+                'taux_tva'   => $request->taux_tva,
+                'notes'      => $request->notes,
+                'statut'     => 'brouillon',
+            ]);
+
+            foreach ($request->lignes as $ligne) {
+                $remise  = $ligne['remise'] ?? 0;
+                $totalHt = round($ligne['quantite'] * $ligne['prix_unitaire'] * (1 - $remise / 100), 2);
+                LigneDevis::create([
+                    'devis_id'      => $devis->id,
+                    'type'          => $ligne['type'],
+                    'designation'   => $ligne['designation'],
+                    'reference'     => ($ligne['type'] === 'piece') ? ($ligne['reference'] ?? null) : null,
+                    'quantite'      => $ligne['quantite'],
+                    'prix_unitaire' => $ligne['prix_unitaire'],
+                    'remise'        => $remise,
+                    'total_ht'      => $totalHt,
+                ]);
+            }
+
+            $devis->recalculer();
+            $dossier->update(['statut' => 'devis_en_cours']);
+            Activite::journaliser('creer_devis', "Création du devis {$devis->numero} pour le dossier {$dossier->numero}", $devis);
+
+            return $devis;
+        });
+
+        $devis->load('lignes');
+        DevisWorkflowService::genererBonCommande($devis);
+
+        return redirect()->route('dossiers-reception.show', $dossier)
             ->with('success', 'Devis créé avec succès.');
     }
 
@@ -126,8 +233,10 @@ class DevisController extends Controller
         if (! in_array($devis->statut, ['brouillon', 'envoye'])) {
             return back()->with('error', 'Ce devis ne peut plus être modifié.');
         }
-        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'lignes']);
-        return view('devis.edit', compact('devis'));
+        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'dossier.client', 'dossier.vehicule', 'lignes']);
+        $operationsMaintenance = OperationsMaintenanceService::liste();
+        $dureesOperations      = OperationsMaintenanceService::dureesParDesignation();
+        return view('devis.edit', compact('devis', 'operationsMaintenance', 'dureesOperations'));
     }
 
     /**
@@ -177,6 +286,11 @@ class DevisController extends Controller
             Activite::journaliser('modifier_devis', "Devis {$devis->numero} modifié", $devis);
         });
 
+        // Répercute au fournisseur les changements de pièces (quantité, ajout,
+        // suppression) — hors transaction, appel HTTP externe.
+        $devis->load('lignes');
+        DevisWorkflowService::resynchroniserBonCommande($devis);
+
         return redirect()->route('devis.show', $devis)->with('success', 'Devis mis à jour.');
     }
 
@@ -190,17 +304,23 @@ class DevisController extends Controller
             return back()->with('error', 'Un devis accepté ne peut pas être supprimé.');
         }
 
-        $or = $devis->ordreReparation;
-        DB::transaction(function () use ($devis, $or) {
+        $or      = $devis->ordreReparation;
+        $dossier = $devis->dossier;
+        DB::transaction(function () use ($devis, $or, $dossier) {
             Activite::journaliser('supprimer_devis', "Devis {$devis->numero} supprimé", $devis);
             $devis->lignes()->delete();
             $devis->delete();
-            if (! $or->allDevis()->exists()) {
+            if ($or && ! $or->allDevis()->exists()) {
                 $or->update(['statut' => 'diagnostic']);
+            }
+            if ($dossier && ! $dossier->devis()->exists()) {
+                $dossier->update(['statut' => 'nouveau']);
             }
         });
 
-        return redirect()->route('ordres-reparations.show', $or)->with('success', 'Devis supprimé.');
+        return $or
+            ? redirect()->route('ordres-reparations.show', $or)->with('success', 'Devis supprimé.')
+            : redirect()->route('dossiers-reception.show', $dossier)->with('success', 'Devis supprimé.');
     }
 
     /**
@@ -208,7 +328,7 @@ class DevisController extends Controller
      */
     public function show(Devis $devis)
     {
-        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'lignes']);
+        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'dossier.client', 'dossier.vehicule', 'lignes']);
         return view('devis.show', compact('devis'));
     }
 
@@ -218,48 +338,64 @@ class DevisController extends Controller
      */
     public function imprimer(Devis $devis)
     {
-        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'lignes']);
+        $devis->load(['ordreReparation.client', 'ordreReparation.vehicule', 'dossier.client', 'dossier.vehicule', 'lignes']);
         return view('devis.print', compact('devis'));
     }
 
     /**
      * Marque le devis comme envoyé au client.
-     * L'OR passe en statut "devis_envoye" — on attend la réponse du client.
+     * L'OR (ou le dossier, avant transformation en OR) passe en statut "envoyé".
      */
     public function marquerEnvoye(Devis $devis)
     {
-        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! auth()->user()->peutValiderDevis()) abort(403);
+        $devis->load('lignes');
+        if ($devis->attendReponseFournisseur()) {
+            return back()->with('error', 'Impossible : le fournisseur n\'a pas encore confirmé la disponibilité de toutes les pièces.');
+        }
         $devis->update(['statut' => 'envoye', 'date_envoi' => now()]);
-        $devis->ordreReparation->update(['statut' => 'devis_envoye']);
+        $devis->ordreReparation?->update(['statut' => 'devis_envoye']);
         Activite::journaliser('envoyer_devis', "Devis {$devis->numero} marqué envoyé au client", $devis);
         return back()->with('success', 'Devis marqué comme envoyé.');
     }
 
     /**
      * Enregistre l'acceptation du devis par le client.
-     * L'OR passe en statut "devis_accepte" pour préparer l'affectation au mécanicien.
-     * Un bon de commande pièces est généré automatiquement si le devis contient des pièces.
+     * Si le devis est rattaché à un dossier de réception (l'OR n'existe pas encore),
+     * l'OR est créé à ce moment précis — c'est le "Lancement Travaux" du schéma de
+     * réception. Un bon de commande pièces est généré automatiquement si le devis
+     * contient des pièces (logique inchangée, désormais toujours exécutée sur un OR).
      */
     public function accepter(Devis $devis)
     {
-        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
-        $devis->update(['statut' => 'accepte', 'date_validation' => now()]);
-        $devis->ordreReparation->update(['statut' => 'devis_accepte']);
+        if (! auth()->user()->peutValiderDevis()) abort(403);
         $devis->load('lignes');
-        $this->genererBonCommande($devis);
+        if ($devis->attendReponseFournisseur()) {
+            return back()->with('error', 'Impossible de valider : le fournisseur n\'a pas encore confirmé la disponibilité de toutes les pièces.');
+        }
+
+        DevisWorkflowService::accepter($devis);
         Activite::journaliser('accepter_devis', "Devis {$devis->numero} accepté par le client ({$devis->montant_ttc} DA TTC)", $devis);
         return back()->with('success', 'Devis accepté — OR prêt pour affectation.');
     }
 
     /**
      * Enregistre le refus du devis par le client.
-     * L'OR retourne en statut "diagnostic" pour pouvoir établir un nouveau devis si nécessaire.
+     * L'OR retourne en statut "diagnostic" pour pouvoir établir un nouveau devis.
+     * Si le devis était rattaché à un dossier (pas encore d'OR), le dossier passe
+     * en "en_attente_client" — le client repart sans travaux, le dossier reste
+     * consultable pour établir un nouveau devis plus tard s'il revient.
      */
     public function refuser(Devis $devis)
     {
-        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! auth()->user()->peutValiderDevis()) abort(403);
+        $devis->load('lignes');
+        if ($devis->attendReponseFournisseur()) {
+            return back()->with('error', 'Impossible : le fournisseur n\'a pas encore confirmé la disponibilité de toutes les pièces.');
+        }
         $devis->update(['statut' => 'refuse']);
-        $devis->ordreReparation->update(['statut' => 'diagnostic']);
+        $devis->ordreReparation?->update(['statut' => 'diagnostic']);
+        $devis->dossier?->update(['statut' => 'en_attente_client']);
         Activite::journaliser('refuser_devis', "Devis {$devis->numero} refusé par le client", $devis);
         return back()->with('success', 'Devis refusé.');
     }
@@ -267,11 +403,16 @@ class DevisController extends Controller
     /**
      * Téléverse le scan du devis signé par le client.
      * Cette action accepte aussi le devis (équivalent à appeler accepter()),
-     * et génère le bon de commande pièces si applicable.
+     * crée l'OR si besoin (devis rattaché à un dossier) et génère le bon de
+     * commande pièces si applicable.
      */
     public function uploadSignature(Request $request, Devis $devis)
     {
-        if (! auth()->user()->hasPermission('gerer_devis')) abort(403);
+        if (! auth()->user()->peutValiderDevis()) abort(403);
+        $devis->load('lignes');
+        if ($devis->attendReponseFournisseur()) {
+            return back()->with('error', 'Impossible de valider : le fournisseur n\'a pas encore confirmé la disponibilité de toutes les pièces.');
+        }
         $request->validate([
             'fichier_signe' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ], [
@@ -282,48 +423,9 @@ class DevisController extends Controller
         ]);
 
         $path = $request->file('fichier_signe')->store('devis-signes', 'public');
-        $devis->update([
-            'fichier_signe'   => $path,
-            'statut'          => 'accepte',
-            'date_validation' => now(),
-        ]);
-        $devis->ordreReparation->update(['statut' => 'devis_accepte']);
-        $devis->load('lignes');
-        $this->genererBonCommande($devis);
+        DevisWorkflowService::accepter($devis, ['fichier_signe' => $path]);
 
         return back()->with('success', 'Devis signé uploadé — bon de commande pièces généré.');
     }
 
-    /**
-     * Génère automatiquement un bon de commande pièces à partir des lignes du devis.
-     * N'est créé que si :
-     *   - Aucun bon de commande n'existe encore pour ce devis
-     *   - Le devis contient au moins une ligne de type "pièce"
-     * Cette méthode est appelée lors de l'acceptation ou du dépôt de signature.
-     */
-    private function genererBonCommande(Devis $devis): void
-    {
-        // On ne génère pas si un BC existe déjà pour ce devis
-        if ($devis->bonCommande) return;
-
-        $pieces = $devis->lignes->where('type', 'piece');
-        if ($pieces->isEmpty()) return;
-
-        $bc = BonCommande::create([
-            'numero'   => BonCommande::genererNumero(),
-            'devis_id' => $devis->id,
-            'or_id'    => $devis->or_id,
-            'statut'   => 'en_attente',
-        ]);
-
-        // Une ligne de BC par pièce du devis (sans les prix — le BC sert à commander, pas à facturer)
-        foreach ($pieces as $ligne) {
-            LigneBonCommande::create([
-                'bon_commande_id' => $bc->id,
-                'designation'     => $ligne->designation,
-                'reference'       => $ligne->reference,
-                'quantite'        => $ligne->quantite,
-            ]);
-        }
-    }
 }

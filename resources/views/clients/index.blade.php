@@ -4,7 +4,7 @@
 @section('page-subtitle', $clients->total() . ' client(s) enregistré(s)')
 
 @section('header-actions')
-@if(auth()->user()->canManageWorkshop())
+@if(auth()->user()->hasPermission('gerer_clients'))
 <a href="{{ route('clients.create') }}"
    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -54,7 +54,7 @@
         </div>
         <p class="text-slate-600 font-medium">Aucun client trouvé</p>
         <p class="text-slate-400 text-sm mt-1">Créez votre premier client pour commencer.</p>
-        @if(auth()->user()->canManageWorkshop())
+        @if(auth()->user()->hasPermission('gerer_clients'))
         <a href="{{ route('clients.create') }}" class="mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
             Ajouter un client
         </a>

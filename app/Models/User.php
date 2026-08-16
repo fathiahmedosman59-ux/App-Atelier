@@ -14,12 +14,13 @@ use Illuminate\Notifications\Notifiable;
  *
  * Rôles disponibles et leurs responsabilités :
  *   - admin                  : accès total, gestion des utilisateurs et permissions
- *   - chef_garage            : gestion des OR, affectation des mécaniciens, devis
- *   - mecanicien             : exécution des travaux, accès à sa feuille de travail
+ *   - chef_garage            : gestion des OR, affectation des techniciens, devis
  *   - receptionniste         : création des OR, restitution des véhicules
- *   - magasinier             : gestion des bons de commande pièces
  *   - caissier               : facturation, encaissement, accord de crédit
  *   - responsable_garantie   : traitement des demandes de garantie (approbation / refus)
+ *
+ * Les techniciens (mécaniciens) ne sont pas des comptes utilisateur — voir
+ * App\Models\Technicien : ils n'utilisent jamais le système eux-mêmes.
  *
  * Le système de permissions fonctionne en deux couches :
  *   1. Permissions par défaut selon le rôle (PermissionService::$roleDefaults)
@@ -59,6 +60,12 @@ class User extends Authenticatable
         return $this->hasMany(UserPermission::class);
     }
 
+    /** Notifications internes destinées à cet utilisateur (cloche en haut de l'écran) */
+    public function notificationsInternes(): HasMany
+    {
+        return $this->hasMany(NotificationInterne::class, 'destinataire_id');
+    }
+
     // ── Système de permissions ─────────────────────────────────────────
 
     /**
@@ -90,14 +97,8 @@ class User extends Authenticatable
     /** Vérifie si l'utilisateur est chef de garage */
     public function isChefGarage(): bool    { return $this->role === 'chef_garage'; }
 
-    /** Vérifie si l'utilisateur est mécanicien */
-    public function isMecanicien(): bool    { return $this->role === 'mecanicien'; }
-
     /** Vérifie si l'utilisateur est réceptionniste */
     public function isReceptionniste(): bool { return $this->role === 'receptionniste'; }
-
-    /** Vérifie si l'utilisateur est magasinier */
-    public function isMagasinier(): bool    { return $this->role === 'magasinier'; }
 
     /** Vérifie si l'utilisateur est caissier */
     public function isCaissier(): bool      { return $this->role === 'caissier'; }
@@ -119,7 +120,24 @@ class User extends Authenticatable
         return $this->isAdmin() || $this->hasPermission('gerer_compte_credit');
     }
 
-    /** Peut voir et gérer les bons de commande pièces */
+    /** Peut voir le suivi des bons de commande pièces (disponibilité fournisseur) */
+    public function peutVoirBonsCommande(): bool
+    {
+        return $this->isAdmin() || $this->hasPermission('voir_bons_commande');
+    }
+
+    /**
+     * Peut valider un devis au client : marquer envoyé/accepté/refusé, uploader
+     * le devis signé. Séparé de gerer_devis (créer/modifier/supprimer) pour
+     * pouvoir confier ce droit à quelqu'un sans lui donner la main sur le
+     * contenu du devis lui-même (ex: un réceptionniste de confiance).
+     */
+    public function peutValiderDevis(): bool
+    {
+        return $this->isAdmin() || $this->hasPermission('gerer_devis') || $this->hasPermission('valider_devis');
+    }
+
+    /** Peut marquer un bon de commande comme reçu (pièces arrivées au garage) */
     public function peutGererBonsCommande(): bool
     {
         return $this->isAdmin() || $this->hasPermission('gerer_bons_commande');
@@ -133,9 +151,7 @@ class User extends Authenticatable
         return match($this->role) {
             'admin'                => 'Administrateur',
             'chef_garage'          => 'Chef de garage',
-            'mecanicien'           => 'Mécanicien',
             'receptionniste'       => 'Réceptionniste',
-            'magasinier'           => 'Magasinier',
             'caissier'             => 'Caissier',
             'responsable_garantie' => 'Responsable Garantie',
             default                => 'Inconnu',
@@ -148,9 +164,7 @@ class User extends Authenticatable
         return match($this->role) {
             'admin'                => 'orange',
             'chef_garage'          => 'purple',
-            'mecanicien'           => 'blue',
             'receptionniste'       => 'green',
-            'magasinier'           => 'teal',
             'caissier'             => 'indigo',
             'responsable_garantie' => 'yellow',
             default                => 'gray',

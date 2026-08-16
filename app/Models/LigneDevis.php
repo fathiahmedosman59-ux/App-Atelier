@@ -11,6 +11,7 @@ class LigneDevis extends Model
 
     protected $fillable = [
         'devis_id', 'type', 'designation', 'reference', 'quantite', 'prix_unitaire', 'remise', 'total_ht',
+        'disponible', 'note_fournisseur',
     ];
 
     protected $casts = [
@@ -18,6 +19,7 @@ class LigneDevis extends Model
         'prix_unitaire' => 'decimal:2',
         'remise'        => 'decimal:2',
         'total_ht'      => 'decimal:2',
+        'disponible'    => 'boolean',
     ];
 
     public function devis(): BelongsTo

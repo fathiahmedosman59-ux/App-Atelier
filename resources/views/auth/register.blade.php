@@ -88,9 +88,7 @@
                     <option value="">— Choisir un rôle —</option>
                     <option value="admin" {{ old('role') === 'admin' ? 'selected' : '' }}>Administrateur</option>
                     <option value="chef_garage" {{ old('role') === 'chef_garage' ? 'selected' : '' }}>Chef de garage</option>
-                    <option value="mecanicien" {{ old('role') === 'mecanicien' ? 'selected' : '' }}>Mécanicien</option>
                     <option value="receptionniste" {{ old('role') === 'receptionniste' ? 'selected' : '' }}>Réceptionniste</option>
-                    <option value="magasinier" {{ old('role') === 'magasinier' ? 'selected' : '' }}>Magasinier</option>
                     <option value="caissier" {{ old('role') === 'caissier' ? 'selected' : '' }}>Caissier</option>
                     <option value="responsable_garantie" {{ old('role') === 'responsable_garantie' ? 'selected' : '' }}>Responsable Garantie</option>
                 </select>
@@ -111,10 +109,6 @@
                     <div class="bg-gray-50 rounded-lg p-2 border">
                         <p class="font-medium text-slate-700">Réceptionniste</p>
                         <p>Clients, accueil</p>
-                    </div>
-                    <div class="bg-gray-50 rounded-lg p-2 border">
-                        <p class="font-medium text-slate-700">Magasinier</p>
-                        <p>Bons de commande, pièces</p>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-2 border">
                         <p class="font-medium text-slate-700">Caissier</p>

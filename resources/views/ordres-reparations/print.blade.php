@@ -9,6 +9,10 @@
         html, body { width: 210mm; }
         body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
         .page { width: 210mm; min-height: 297mm; padding: 10mm; }
+        @media screen {
+            html, body { width: 100%; background: #d1d5db; }
+            .page { margin: 55px auto 40px; box-shadow: 0 4px 24px rgba(0,0,0,.18); }
+        }
 
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
         .header .logo-text { font-size: 18px; font-weight: bold; color: #1e293b; }
@@ -63,11 +67,13 @@
 <div class="page">
 
     {{-- Bouton impression (masqué à l'impression) --}}
-    <div class="no-print" style="text-align:right; margin-bottom:10px;">
-        <button onclick="window.print()" style="background:#f97316;color:white;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
-            🖨 Imprimer la fiche
-        </button>
-        <a href="{{ route('ordres-reparations.show', $or) }}" style="margin-left:10px;color:#64748b;font-size:12px;">← Retour</a>
+    <div class="no-print" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:99;">
+        @if(request('apercu'))
+        <button onclick="window.close()" style="background:#dc2626;color:#fff;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">← Fermer</button>
+        @else
+        <a href="{{ route('ordres-reparations.show', $or) }}" style="background:#dc2626;color:#fff;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;text-decoration:none;">← Retour</a>
+        @endif
+        <button onclick="window.print()" style="background:#f97316;color:white;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">🖨 Imprimer</button>
     </div>
 
     {{-- En-tête --}}
@@ -308,8 +314,10 @@
 
 </div>
 <script>
+@if(!request('apercu'))
 window.onafterprint = function () { window.close(); };
 window.addEventListener('load', function () { setTimeout(window.print, 400); });
+@endif
 </script>
 </body>
 </html>

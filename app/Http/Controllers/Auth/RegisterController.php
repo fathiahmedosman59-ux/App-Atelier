@@ -20,7 +20,7 @@ class RegisterController extends Controller
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role'     => ['required', 'in:admin,chef_garage,mecanicien,receptionniste,magasinier,caissier'],
+            'role'     => ['required', 'in:admin,chef_garage,receptionniste,caissier,responsable_garantie'],
         ], [
             'name.required'      => 'Le nom est obligatoire.',
             'email.required'     => 'L\'adresse email est obligatoire.',

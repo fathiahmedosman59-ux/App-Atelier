@@ -3,37 +3,41 @@
 namespace App\Http\Controllers;
 
 use App\Models\BonCommande;
-use Illuminate\Http\Request;
+use App\Services\FournisseurApiService;
 
 /**
- * Contrôleur des Bons de Commande pièces (BC).
+ * Suivi des Bons de Commande pièces (BC).
  *
- * Un bon de commande est généré automatiquement quand un devis avec des pièces est accepté.
- * Il permet au magasinier de suivre la commande des pièces détachées auprès des fournisseurs.
+ * Un bon de commande est généré automatiquement dès la création d'un devis
+ * avec des pièces (avant même sa validation), puis transmis en temps réel au
+ * système fournisseur (stcd-magasin) qui renvoie la disponibilité et le prix
+ * de chaque pièce (voir FournisseurApiService). Tant que le devis n'est pas
+ * accepté, le BC n'a pas encore d'OR — il reste rattaché à son dossier de
+ * réception (cf. BonCommande::dossier()).
+ *
+ * app-atelier ne gère plus la commande elle-même (c'est stcd-magasin qui s'en
+ * charge) : il ne reste ici qu'un suivi en lecture seule, plus l'action de
+ * marquer les pièces comme physiquement reçues au garage.
+ *
  * Cycle de vie : en_attente → commande → reçu.
- * Accès réservé : magasinier, chef de garage, admin.
+ * Consultation : chef de garage, admin. Marquer reçu : chef de garage, admin.
  */
 class BonCommandeController extends Controller
 {
-    /**
-     * Vérifie que l'utilisateur connecté a le droit de gérer les bons de commande.
-     * Lève une erreur 403 sinon. Appelée en début de chaque méthode.
-     */
-    private function autoriser(): void
-    {
-        if (! auth()->user()->peutGererBonsCommande()) {
-            abort(403, 'Accès réservé au magasinier et aux responsables atelier.');
-        }
-    }
-
     /**
      * Liste tous les bons de commande, du plus récent au plus ancien.
      */
     public function index()
     {
-        $this->autoriser();
+        if (! auth()->user()->peutVoirBonsCommande()) abort(403);
 
-        $bons = BonCommande::with(['ordreReparation.client', 'ordreReparation.vehicule', 'devis'])
+        $this->relancerEnvoisEnAttente();
+
+        $bons = BonCommande::with([
+                'ordreReparation.client', 'ordreReparation.vehicule',
+                'dossier.client', 'dossier.vehicule',
+                'devis', 'lignes',
+            ])
             ->latest()
             ->paginate(25);
 
@@ -41,53 +45,58 @@ class BonCommandeController extends Controller
     }
 
     /**
-     * Affiche la fiche détaillée d'un bon de commande avec ses lignes (pièces à commander).
+     * Il n'y a pas de tâche planifiée (cron) dans cet environnement : on relance
+     * ici, à chaque consultation de la liste, l'envoi des BC dont la première
+     * tentative a échoué (ex: stcd-magasin injoignable au moment de la création),
+     * plutôt qu'ils ne restent bloqués indéfiniment en "en attente". Limité à
+     * quelques BC de plus de 30s pour ne pas ralentir la page si le fournisseur
+     * est réellement hors ligne.
+     */
+    private function relancerEnvoisEnAttente(): void
+    {
+        $enEchec = BonCommande::whereNull('fournisseur_repondu_at')
+            ->where('created_at', '<=', now()->subSeconds(30))
+            ->latest()
+            ->limit(3)
+            ->get();
+
+        if ($enEchec->isEmpty()) return;
+
+        $service = app(FournisseurApiService::class);
+        foreach ($enEchec as $bc) {
+            $service->envoyerBonCommande($bc);
+        }
+    }
+
+    /**
+     * Affiche la fiche détaillée d'un bon de commande : ses lignes et la
+     * disponibilité renvoyée par le fournisseur pour chacune.
      */
     public function show(BonCommande $bonCommande)
     {
-        $this->autoriser();
+        if (! auth()->user()->peutVoirBonsCommande()) abort(403);
 
-        $bonCommande->load(['ordreReparation.client', 'ordreReparation.vehicule', 'devis', 'lignes']);
+        $bonCommande->load([
+            'ordreReparation.client', 'ordreReparation.vehicule',
+            'dossier.client', 'dossier.vehicule',
+            'devis', 'lignes',
+        ]);
 
         return view('bons-commande.show', compact('bonCommande'));
     }
 
     /**
-     * Génère la page d'impression du bon de commande (format A4).
-     * Contient les pièces à commander, le fournisseur, et les cases à cocher à réception.
-     */
-    public function imprimer(BonCommande $bonCommande)
-    {
-        $this->autoriser();
-
-        $bonCommande->load(['ordreReparation.client', 'ordreReparation.vehicule', 'devis', 'lignes']);
-
-        return view('bons-commande.print', compact('bonCommande'));
-    }
-
-    /**
-     * Passe le bon de commande au statut "commandé".
-     * Peut aussi mettre à jour les notes (ex: nom du fournisseur contacté, délai estimé).
-     */
-    public function marquerCommande(Request $request, BonCommande $bonCommande)
-    {
-        $this->autoriser();
-
-        $bonCommande->update([
-            'statut' => 'commande',
-            'notes'  => $request->notes ?? $bonCommande->notes,
-        ]);
-
-        return back()->with('success', "BC {$bonCommande->numero} marqué comme commandé.");
-    }
-
-    /**
-     * Marque toutes les pièces du bon de commande comme reçues.
-     * Le BC passe au statut "reçu" et toutes les lignes sont cochées d'un coup.
+     * Marque toutes les pièces du bon de commande comme reçues au garage.
+     * Le BC passe au statut "reçu", ce qui débloque l'affectation du mécanicien.
      */
     public function marquerRecu(BonCommande $bonCommande)
     {
-        $this->autoriser();
+        if (! auth()->user()->peutGererBonsCommande()) abort(403);
+
+        $bonCommande->loadMissing('lignes');
+        if (! $bonCommande->estValideParFournisseur()) {
+            return back()->with('error', "Impossible : le fournisseur (stcd-magasin) n'a pas encore validé la disponibilité de toutes les pièces de {$bonCommande->numero}.");
+        }
 
         $bonCommande->update(['statut' => 'recu']);
         $bonCommande->lignes()->update(['recu' => true]);
@@ -102,9 +111,16 @@ class BonCommandeController extends Controller
      */
     public function marquerLigneRecue(BonCommande $bonCommande, int $ligneId)
     {
-        $this->autoriser();
+        if (! auth()->user()->peutGererBonsCommande()) abort(403);
 
         $ligne = $bonCommande->lignes()->findOrFail($ligneId);
+
+        // On ne peut pas marquer une pièce reçue tant que le fournisseur n'a pas
+        // statué sur sa disponibilité (on peut en revanche toujours décocher).
+        if (! $ligne->recu && is_null($ligne->disponible)) {
+            return back()->with('error', "Impossible : le fournisseur n'a pas encore validé la disponibilité de « {$ligne->designation} ».");
+        }
+
         // Bascule : si la pièce était reçue, elle devient non reçue, et vice-versa
         $ligne->update(['recu' => ! $ligne->recu]);
 

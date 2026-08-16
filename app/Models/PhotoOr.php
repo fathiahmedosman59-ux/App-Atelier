@@ -9,7 +9,7 @@ class PhotoOr extends Model
 {
     protected $table = 'photos_or';
 
-    protected $fillable = ['or_id', 'chemin', 'nom_original', 'taille', 'legende'];
+    protected $fillable = ['or_id', 'moment', 'chemin', 'nom_original', 'taille', 'legende'];
 
     public function ordreReparation(): BelongsTo
     {

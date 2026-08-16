@@ -1,7 +1,7 @@
 @extends('layouts.app')
-@section('title', 'Bons de commande pièces')
-@section('page-title', 'Bons de commande pièces')
-@section('page-subtitle', 'Pièces à commander pour les véhicules en cours')
+@section('title', 'Suivi des pièces')
+@section('page-title', 'Suivi des pièces')
+@section('page-subtitle', 'Bons de commande envoyés au fournisseur et leur disponibilité')
 
 @section('content')
 <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -29,21 +29,27 @@
                 <th class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Client</th>
                 <th class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Devis</th>
                 <th class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Statut</th>
+                <th class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Disponibilité fournisseur</th>
                 <th class="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Date</th>
                 <th class="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-6 py-3">Actions</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
             @foreach($bons as $bc)
+            @php
+                $total = $bc->lignes->count();
+                $repondues = $bc->lignes->whereNotNull('disponible')->count();
+                $disponibles = $bc->lignes->where('disponible', true)->count();
+            @endphp
             <tr class="hover:bg-gray-50 transition-colors">
                 <td class="px-6 py-4">
                     <span class="font-mono font-bold text-slate-900 text-sm">{{ $bc->numero }}</span>
                 </td>
                 <td class="px-6 py-4">
-                    <p class="font-mono font-bold text-slate-800 text-sm">{{ $bc->ordreReparation->vehicule->immatriculation }}</p>
-                    <p class="text-xs text-slate-500">{{ $bc->ordreReparation->vehicule->designation }}</p>
+                    <p class="font-mono font-bold text-slate-800 text-sm">{{ $bc->vehicule?->immatriculation ?? '—' }}</p>
+                    <p class="text-xs text-slate-500">{{ $bc->vehicule?->designation }}</p>
                 </td>
-                <td class="px-6 py-4 text-sm text-slate-600">{{ $bc->ordreReparation->client->nom_complet }}</td>
+                <td class="px-6 py-4 text-sm text-slate-600">{{ $bc->client?->nom_complet ?? '—' }}</td>
                 <td class="px-6 py-4">
                     <span class="font-mono text-xs text-slate-500">{{ $bc->devis->numero }}</span>
                 </td>
@@ -53,15 +59,22 @@
                         {{ $bc->getStatutLabel() }}
                     </span>
                 </td>
+                <td class="px-6 py-4">
+                    @if($total === 0)
+                        <span class="text-xs text-slate-400">—</span>
+                    @elseif($repondues === 0)
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">En attente du fournisseur</span>
+                    @elseif($disponibles === $total)
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Tout disponible</span>
+                    @elseif($disponibles === 0)
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Rien disponible</span>
+                    @else
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">{{ $disponibles }}/{{ $total }} disponibles</span>
+                    @endif
+                </td>
                 <td class="px-6 py-4 text-sm text-slate-500">{{ $bc->created_at->format('d/m/Y') }}</td>
                 <td class="px-6 py-4">
                     <div class="flex items-center justify-end gap-2">
-                        <a href="{{ route('bons-commande.imprimer', $bc) }}" target="_blank"
-                           class="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded" title="Imprimer">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                            </svg>
-                        </a>
                         <a href="{{ route('bons-commande.show', $bc) }}"
                            class="text-slate-400 hover:text-orange-500 transition-colors p-1 rounded" title="Voir">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

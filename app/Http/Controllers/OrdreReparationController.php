@@ -4,12 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Activite;
 use App\Models\Client;
+use App\Models\Devis;
+use App\Models\EntretienTache;
+use App\Models\LigneDevis;
 use App\Models\NotificationInterne;
 use App\Models\OrdreReparation;
 use App\Models\PhotoOr;
+use App\Models\Technicien;
+use App\Models\TypeMoteur;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Contrôleur des Ordres de Réparation (OR).
@@ -19,27 +25,22 @@ use Illuminate\Http\Request;
  */
 class OrdreReparationController extends Controller
 {
+    // Marge (en km) en dessous d'un palier d'entretien pour le considérer atteint
+    private const ENTRETIEN_MARGE_PROCHE = 100;
+    // Au-delà de cette marge de dépassement (en km), on signale un entretien en retard
+    private const ENTRETIEN_MARGE_DEPASSEMENT = 500;
+
     /**
      * Liste tous les ordres de réparation avec filtres par statut, type et recherche texte.
-     * Chaque rôle voit une vue restreinte :
-     *   - Caissier : uniquement les OR prêts à facturer ou déjà facturés
-     *   - Magasinier / Réceptionniste : ne voient pas les OR facturés, livrés ou annulés
-     *   - Autres rôles : voient tout
+     * "Toutes les OR" montre réellement tout, quel que soit le rôle — filtrer sur un
+     * statut précis se fait via le paramètre `statut` (ou `pret_restitution`), jamais
+     * en cachant silencieusement des résultats par défaut.
      */
     public function index(Request $request)
     {
         $query = OrdreReparation::with(['client', 'vehicule', 'conseiller'])
             ->orderByDesc('date_entree')
             ->orderByDesc('heure_entree');
-
-        // Caissier : uniquement les véhicules prêts à facturer ou déjà facturés
-        if (auth()->user()->isCaissier()) {
-            $query->whereIn('statut', ['pret', 'facture']);
-        }
-        // Magasinier et réceptionniste ne voient pas les OR facturés/livrés/annulés
-        elseif (in_array(auth()->user()->role, ['magasinier', 'receptionniste'])) {
-            $query->whereNotIn('statut', ['facture', 'livre', 'annule']);
-        }
 
         // Recherche par numéro OR, motif, nom client ou immatriculation
         if ($search = $request->get('q')) {
@@ -51,8 +52,14 @@ class OrdreReparationController extends Controller
             });
         }
 
+        // Filtre spécial : véhicules facturés dont la facture est réglée (payée
+        // ou accordée à crédit), ou service gratuit déjà prêt — prêts à être
+        // physiquement restitués au client (cf. OrdreReparation::scopePretsARestituer).
+        if ($request->boolean('pret_restitution')) {
+            $query->pretsARestituer();
+        }
         // Filtre optionnel par statut (ex: en_cours, pret...)
-        if ($statut = $request->get('statut')) {
+        elseif ($statut = $request->get('statut')) {
             $query->where('statut', $statut);
         }
 
@@ -83,7 +90,7 @@ class OrdreReparationController extends Controller
     public function create(Request $request)
     {
         $clients     = Client::orderBy('nom')->get();
-        $techniciens = User::whereIn('role', ['mecanicien'])->orderBy('name')->get();
+        $techniciens = Technicien::where('actif', true)->orderBy('nom')->get();
 
         // Pré-sélection du client et du véhicule si fournis en paramètre GET
         $clientSelectionne  = $request->get('client_id')  ? Client::with('vehicules')->find($request->get('client_id'))  : null;
@@ -114,6 +121,7 @@ class OrdreReparationController extends Controller
             'client_id'              => ['required', 'exists:clients,id'],
             'vehicule_id'            => ['required', 'exists:vehicules,id'],
             'type'                   => ['required', 'in:normal,garantie,sinistre,entretien'],
+            'type_moteur_id'         => ['nullable', 'exists:types_moteur,id'],
             'kilometrage_entree'     => ['required', 'integer', 'min:0'],
             'niveau_carburant'       => ['required', 'in:vide,1/4,1/2,3/4,plein'],
             'proprete_interne'       => ['nullable', 'in:bon,acceptable,mauvais'],
@@ -125,12 +133,12 @@ class OrdreReparationController extends Controller
             'date_entree'            => ['required', 'date'],
             'heure_entree'           => ['nullable', 'date_format:H:i'],
             'date_sortie_prevue'     => ['nullable', 'date', 'after_or_equal:date_entree'],
-            'technicien_id'          => ['nullable', 'exists:users,id'],
+            'technicien_id'          => ['nullable', 'exists:techniciens,id'],
             'urgence'                => ['required', 'in:normal,urgent,tres_urgent'],
             'notes_internes'         => ['nullable', 'string'],
             'dommages_carrosserie'   => ['nullable', 'string'],
             'signature_client'       => ['boolean'],
-            'photos_vehicule'        => ['nullable', 'array', 'max:10'],
+            'photos_vehicule'        => ['required', 'array', 'min:1', 'max:10'],
             'photos_vehicule.*'      => ['file', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ], [
             'client_id.required'          => 'Veuillez sélectionner un client.',
@@ -139,6 +147,8 @@ class OrdreReparationController extends Controller
             'vehicule_id.exists'          => 'Le véhicule sélectionné est introuvable.',
             'type.required'               => 'Veuillez sélectionner le type d\'ordre de réparation.',
             'type.in'                     => 'Le type d\'ordre sélectionné est invalide.',
+            'photos_vehicule.required'    => 'Au moins une photo du véhicule est obligatoire à la réception.',
+            'photos_vehicule.min'         => 'Au moins une photo du véhicule est obligatoire à la réception.',
             'kilometrage_entree.required' => 'Le kilométrage à l\'entrée est obligatoire.',
             'kilometrage_entree.integer'  => 'Le kilométrage doit être un nombre entier.',
             'kilometrage_entree.min'      => 'Le kilométrage ne peut pas être négatif.',
@@ -178,10 +188,33 @@ class OrdreReparationController extends Controller
             $data['statut_garantie'] = 'en_attente';
         }
 
+        // type_moteur_id concerne le véhicule (mémorisé sur sa fiche), pas l'OR lui-même
+        $typeMoteurId = $data['type_moteur_id'] ?? null;
+        unset($data['type_moteur_id']);
+
+        // Entretien périodique : on résout le palier constructeur avant de créer l'OR,
+        // pour pouvoir l'enregistrer directement dessus (traçabilité).
+        $entretienPalier = null;
+        if ($data['type'] === 'entretien' && $typeMoteurId) {
+            $vehicule = Vehicule::find($data['vehicule_id']);
+            $entretienPalier = $this->resoudrePalierEntretien($vehicule, $data['kilometrage_entree'], $typeMoteurId);
+            $data['entretien_km_seuil'] = $entretienPalier;
+        }
+
         $or = OrdreReparation::create($data);
 
-        // On met à jour le kilométrage du véhicule dans sa fiche
-        $or->vehicule->update(['kilometrage' => $data['kilometrage_entree']]);
+        // On met à jour le kilométrage (et le type de moteur, une fois connu) du véhicule
+        $or->vehicule->update(array_filter([
+            'kilometrage'    => $data['kilometrage_entree'],
+            'type_moteur_id' => $typeMoteurId,
+        ], fn ($v) => $v !== null));
+
+        // Génère automatiquement un devis brouillon avec les pièces à remplacer
+        // du barème constructeur, pour que le chef de garage n'ait plus qu'à
+        // ajouter la main d'œuvre et les prix.
+        if ($entretienPalier !== null) {
+            $this->genererDevisEntretien($or, $typeMoteurId, $entretienPalier);
+        }
 
         // Enregistrement des photos prises lors de la réception du véhicule
         if ($request->hasFile('photos_vehicule')) {
@@ -217,7 +250,7 @@ class OrdreReparationController extends Controller
      */
     public function show(OrdreReparation $ordresReparation)
     {
-        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'photos', 'photosOr', 'devis', 'allDevis.lignes', 'facture']);
+        $ordresReparation->load(['client', 'vehicule.typeMoteur', 'conseiller', 'technicien', 'chef', 'photos', 'photosOr', 'devis', 'allDevis.lignes', 'facture', 'dossier.reservation']);
         return view('ordres-reparations.show', ['or' => $ordresReparation]);
     }
 
@@ -267,12 +300,13 @@ class OrdreReparationController extends Controller
 
     /**
      * Démarre les travaux sur un OR.
-     * Accessible par le chef de garage (gerer_ordres) ou le technicien affecté à cet OR.
+     * Accessible par le chef de garage / admin (gerer_ordres) — le technicien n'a pas
+     * de compte de connexion, c'est le chef qui pointe le début des travaux pour lui.
      * Enregistre l'heure de début et passe le statut à "en_cours".
      */
     public function demarrerTravaux(OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres') && auth()->id() !== $ordresReparation->technicien_id) {
+        if (! auth()->user()->hasPermission('gerer_ordres')) {
             abort(403);
         }
 
@@ -288,10 +322,13 @@ class OrdreReparationController extends Controller
      * Clôture les travaux sur un OR.
      * Enregistre l'heure de fin, la durée estimée si fournie,
      * et passe le statut à "controle_qualite" pour validation par le chef.
+     * Exception : un service gratuit (cf. service_gratuit — Service Rapide "Autre"
+     * à tarif 0, créé sans devis) saute le contrôle qualité et le lavage, et
+     * passe directement en "prêt" pour restitution — pas de facture non plus.
      */
     public function terminerTravaux(Request $request, OrdreReparation $ordresReparation)
     {
-        if (! auth()->user()->hasPermission('gerer_ordres') && auth()->id() !== $ordresReparation->technicien_id) {
+        if (! auth()->user()->hasPermission('gerer_ordres')) {
             abort(403);
         }
 
@@ -304,13 +341,16 @@ class OrdreReparationController extends Controller
 
         $ordresReparation->update([
             'heure_fin_travaux' => now(),
-            'statut'            => 'controle_qualite',
+            'statut'            => $ordresReparation->service_gratuit ? 'pret' : 'controle_qualite',
         ]);
         if ($request->filled('duree_estimee')) {
             $ordresReparation->update(['duree_estimee' => (float) $request->duree_estimee]);
         }
         Activite::journaliser('terminer_travaux', "Fin des travaux sur {$ordresReparation->numero}", $ordresReparation);
-        return back()->with('success', 'Travaux terminés — passage en contrôle qualité.');
+
+        return $ordresReparation->service_gratuit
+            ? back()->with('success', 'Travaux terminés — service gratuit, véhicule prêt (pas de facturation, pas de contrôle qualité/lavage).')
+            : back()->with('success', 'Travaux terminés — passage en contrôle qualité.');
     }
 
     /**
@@ -334,6 +374,14 @@ class OrdreReparationController extends Controller
         if (! auth()->user()->hasPermission('valider_lavage')) abort(403);
 
         $ordresReparation->update(['statut' => 'pret']);
+
+        $ordresReparation->loadMissing('client', 'vehicule');
+        NotificationInterne::notifierVehiculePret(
+            'Véhicule prêt à restituer',
+            "{$ordresReparation->numero} — {$ordresReparation->vehicule->immatriculation} ({$ordresReparation->client->nom_complet}) est prêt, le client peut venir le récupérer.",
+            $ordresReparation->id
+        );
+
         return back()->with('success', 'Lavage terminé — véhicule prêt, client peut être contacté.');
     }
 
@@ -345,6 +393,11 @@ class OrdreReparationController extends Controller
     public function changerStatut(Request $request, OrdreReparation $ordresReparation)
     {
         if (! auth()->user()->hasPermission('gerer_ordres')) abort(403);
+
+        // Tant que l'OR est de type garantie, il appartient exclusivement à
+        // l'équipe garantie — le chef de garage ne peut pas en changer le
+        // statut (cf. changerStatutGarantie() pour approuver/refuser).
+        if ($ordresReparation->type === 'garantie') abort(403);
 
         $request->validate([
             'statut' => ['required', 'in:ouvert,diagnostic,devis_envoye,devis_accepte,en_cours,controle_qualite,lavage,pret,facture,livre,annule'],
@@ -388,16 +441,18 @@ class OrdreReparationController extends Controller
         }
 
         $request->validate([
-            'technicien_id' => ['required', 'exists:users,id'],
+            'technicien_id' => ['required', 'exists:techniciens,id'],
             'service'       => ['required', 'in:rapide,mecanique,electricite,carrosserie,peinture'],
-            'duree_estimee' => ['nullable', 'numeric', 'min:0.5'],
+            // min 0.25h (au lieu de 0.5h) pour accepter les durées Service Rapide reprises
+            // telles quelles depuis la réservation (ex: 0.25h pour un contrôle pression pneus).
+            'duree_estimee' => ['nullable', 'numeric', 'min:0.25'],
         ], [
             'technicien_id.required' => 'Veuillez sélectionner un technicien.',
             'technicien_id.exists'   => 'Le technicien sélectionné est introuvable.',
             'service.required'       => 'Veuillez sélectionner le service concerné.',
             'service.in'             => 'Le service sélectionné est invalide.',
             'duree_estimee.numeric'  => 'La durée estimée doit être un nombre.',
-            'duree_estimee.min'      => 'La durée estimée doit être d\'au moins 0,5 heure.',
+            'duree_estimee.min'      => 'La durée estimée doit être d\'au moins 15 minutes (0,25 heure).',
         ]);
 
         $ordresReparation->update([
@@ -409,9 +464,9 @@ class OrdreReparationController extends Controller
             'statut'           => 'devis_accepte',
         ]);
 
-        $tech = User::find($request->technicien_id);
+        $tech = Technicien::find($request->technicien_id);
         Activite::journaliser('affecter_technicien', "Affectation de {$tech->name} sur {$ordresReparation->numero}", $ordresReparation);
-        return back()->with('success', 'Mécanicien affecté avec succès.');
+        return back()->with('success', 'Technicien affecté avec succès.');
     }
 
     /**
@@ -420,6 +475,8 @@ class OrdreReparationController extends Controller
      */
     public function uploadFicheSignee(Request $request, OrdreReparation $ordresReparation)
     {
+        if (! auth()->user()->hasPermission('creer_dossiers')) abort(403);
+
         $request->validate([
             'fiche_signee' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
         ], [
@@ -441,13 +498,52 @@ class OrdreReparationController extends Controller
     }
 
     /**
+     * Enregistre la fiche de restitution signée (scan ou photo du document
+     * papier remis au client à la sortie) — même principe que la fiche de
+     * réception, côté restitution.
+     */
+    public function uploadFicheSigneeRestitution(Request $request, OrdreReparation $ordresReparation)
+    {
+        if (! auth()->user()->hasPermission('restituer_vehicule')) abort(403);
+
+        $request->validate([
+            'fiche_signee_restitution' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
+        ], [
+            'fiche_signee_restitution.required' => 'Veuillez sélectionner un fichier à uploader.',
+            'fiche_signee_restitution.file'     => 'Le fichier uploadé est invalide.',
+            'fiche_signee_restitution.mimes'    => 'Le fichier doit être au format PDF, JPG ou PNG.',
+            'fiche_signee_restitution.max'      => 'Le fichier ne doit pas dépasser 10 Mo.',
+        ]);
+
+        if ($ordresReparation->fiche_signee_restitution) {
+            \Storage::disk('public')->delete($ordresReparation->fiche_signee_restitution);
+        }
+
+        $path = $request->file('fiche_signee_restitution')->store('fiches-signees-restitution', 'public');
+        $ordresReparation->update(['fiche_signee_restitution' => $path]);
+
+        return back()->with('success', 'Fiche de restitution signée enregistrée.');
+    }
+
+    /**
      * Affiche la feuille de travail du mécanicien pour un OR.
      * Inclut les lignes du devis (pièces et main d'œuvre) pour guider les travaux.
      */
     public function feuilletTravail(OrdreReparation $ordresReparation)
     {
-        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'chef', 'allDevis.lignes']);
-        return view('ordres-reparations.feuille-travail', ['or' => $ordresReparation]);
+        $ordresReparation->load(['client', 'vehicule.typeMoteur', 'conseiller', 'technicien', 'chef', 'allDevis.lignes']);
+
+        $tachesEntretien = null;
+        if ($ordresReparation->type === 'entretien' && $ordresReparation->entretien_km_seuil && $ordresReparation->vehicule->type_moteur_id) {
+            $tachesEntretien = \App\Models\EntretienTache::where('type_moteur_id', $ordresReparation->vehicule->type_moteur_id)
+                ->where('km_seuil', $ordresReparation->entretien_km_seuil)
+                ->whereIn('action', ['inspecter', 'nettoyer', 'lubrifier'])
+                ->orderBy('designation')
+                ->get()
+                ->groupBy('action');
+        }
+
+        return view('ordres-reparations.feuille-travail', ['or' => $ordresReparation, 'tachesEntretien' => $tachesEntretien]);
     }
 
     /**
@@ -459,7 +555,7 @@ class OrdreReparationController extends Controller
     public function restitution(OrdreReparation $ordresReparation)
     {
         if (! auth()->user()->hasPermission('restituer_vehicule')) abort(403);
-        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien']);
+        $ordresReparation->load(['client', 'vehicule', 'conseiller', 'technicien', 'photosOr']);
         return view('ordres-reparations.restitution', ['or' => $ordresReparation]);
     }
 
@@ -480,10 +576,22 @@ class OrdreReparationController extends Controller
             'proprete_externe_sortie'=> ['required', 'in:bon,acceptable,mauvais'],
             'date_sortie_reelle'     => ['required', 'date'],
             'notes_restitution'      => ['nullable', 'string'],
+            'dommages_carrosserie_sortie' => ['nullable', 'string'],
+            'photos_vehicule_sortie'      => ['required', 'array', 'min:1', 'max:10'],
+            'photos_vehicule_sortie.*'    => ['file', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+        ], [
+            'photos_vehicule_sortie.required' => 'Au moins une photo du véhicule est obligatoire à la restitution.',
+            'photos_vehicule_sortie.min'       => 'Au moins une photo du véhicule est obligatoire à la restitution.',
         ]);
 
         // Les équipements présents à la sortie sont cochés dans le formulaire
         $equipements = $request->input('equipements_sortie', []);
+
+        $dommagesSortie = [];
+        if ($request->filled('dommages_carrosserie_sortie')) {
+            $decoded = json_decode($request->dommages_carrosserie_sortie, true);
+            $dommagesSortie = is_array($decoded) ? $decoded : [];
+        }
 
         $ordresReparation->update([
             'kilometrage_sortie'      => $request->kilometrage_sortie,
@@ -491,12 +599,27 @@ class OrdreReparationController extends Controller
             'proprete_interne_sortie' => $request->proprete_interne_sortie,
             'proprete_externe_sortie' => $request->proprete_externe_sortie,
             'equipements_sortie'      => $equipements,
+            'dommages_carrosserie_sortie' => $dommagesSortie,
             'notes_restitution'       => $request->notes_restitution,
             'signature_restitution'   => $request->boolean('signature_restitution'),
             'date_sortie_reelle'      => $request->date_sortie_reelle,
             'restitue_par_id'         => auth()->id(),  // Qui a effectué la restitution
             'statut'                  => 'livre',       // L'OR est clôturé
         ]);
+
+        // Photos prises à la restitution, distinguées des photos de réception (moment)
+        if ($request->hasFile('photos_vehicule_sortie')) {
+            foreach ($request->file('photos_vehicule_sortie') as $file) {
+                $path = $file->store("photos-or/{$ordresReparation->id}", 'public');
+                PhotoOr::create([
+                    'or_id'        => $ordresReparation->id,
+                    'moment'       => 'sortie',
+                    'chemin'       => $path,
+                    'nom_original' => $file->getClientOriginalName(),
+                    'taille'       => $file->getSize(),
+                ]);
+            }
+        }
 
         Activite::journaliser('restituer_vehicule', "Restitution du véhicule — OR {$ordresReparation->numero}", $ordresReparation);
 
@@ -511,41 +634,149 @@ class OrdreReparationController extends Controller
      */
     public function imprimerRestitution(OrdreReparation $ordresReparation)
     {
+        if (! auth()->user()->hasPermission('restituer_vehicule')) abort(403);
+
         $ordresReparation->load(['client', 'vehicule', 'conseiller', 'restitueePar']);
         return view('ordres-reparations.print-restitution', ['or' => $ordresReparation]);
     }
 
     /**
      * Traite la décision de garantie (approuvé ou refusé) pour un OR de type garantie.
-     * Si approuvée : l'OR passe en statut "devis_accepte" pour démarrer les travaux.
-     * Si refusée : le motif de refus est enregistré et l'OR reste bloqué.
+     * Si approuvée : l'OR passe en statut "devis_accepte" pour démarrer les travaux —
+     * la facturation ira ensuite au compte garantie de la marque (cf. FactureController).
+     * Si refusée : le motif est enregistré et l'OR redevient un OR normal, pour pouvoir
+     * établir un devis client et suivre le parcours standard jusqu'à la livraison.
      */
     public function changerStatutGarantie(Request $request, OrdreReparation $ordresReparation)
     {
         if (! auth()->user()->hasPermission('traiter_garanties')) abort(403);
 
         $request->validate([
-            'statut_garantie'      => ['required', 'in:approuve,refuse'],
-            'motif_refus_garantie' => ['required_if:statut_garantie,refuse', 'nullable', 'string'],
+            'statut_garantie'            => ['required', 'in:approuve,refuse'],
+            'motif_approbation_garantie' => ['required_if:statut_garantie,approuve', 'nullable', 'string'],
+            'motif_refus_garantie'       => ['required_if:statut_garantie,refuse', 'nullable', 'string'],
+            'sortie_garantie'            => ['nullable', 'boolean'],
         ], [
-            'statut_garantie.required'         => 'Veuillez sélectionner une décision pour la garantie.',
-            'statut_garantie.in'               => 'La décision sélectionnée est invalide.',
-            'motif_refus_garantie.required_if' => 'Veuillez indiquer le motif du refus de garantie.',
+            'statut_garantie.required'               => 'Veuillez sélectionner une décision pour la garantie.',
+            'statut_garantie.in'                     => 'La décision sélectionnée est invalide.',
+            'motif_approbation_garantie.required_if' => 'Veuillez indiquer le motif de l\'approbation de garantie.',
+            'motif_refus_garantie.required_if'       => 'Veuillez indiquer le motif du refus de garantie.',
         ]);
 
         $update = ['statut_garantie' => $request->statut_garantie];
 
-        // Garantie approuvée → on peut démarrer les travaux
+        // Garantie approuvée → motif enregistré, on peut démarrer les travaux
         if ($request->statut_garantie === 'approuve') {
             $update['statut'] = 'devis_accepte';
+            $update['motif_approbation_garantie'] = $request->motif_approbation_garantie;
         }
-        // Garantie refusée → on enregistre le motif de refus
+        // Garantie refusée → motif enregistré, l'OR redevient normal (devis client possible)
         elseif ($request->statut_garantie === 'refuse') {
             $update['motif_refus_garantie'] = $request->motif_refus_garantie;
+            $update['type'] = 'normal';
         }
 
         $ordresReparation->update($update);
 
+        // Signalement définitif : ce véhicule ne sera plus jamais proposé au
+        // circuit garantie, quelle que soit sa catégorie/son âge par la suite
+        // — cf. Vehicule::estEligibleGarantie().
+        if ($request->statut_garantie === 'refuse' && $request->boolean('sortie_garantie')) {
+            $ordresReparation->vehicule->update(['garantie_sortie_le' => now()]);
+            Activite::journaliser(
+                'sortie_garantie_vehicule',
+                "Véhicule {$ordresReparation->vehicule->immatriculation} marqué définitivement sorti de la garantie (OR {$ordresReparation->numero})",
+                $ordresReparation->vehicule
+            );
+        }
+
+        $motif = $request->statut_garantie === 'refuse' ? $request->motif_refus_garantie : $request->motif_approbation_garantie;
+        Activite::journaliser(
+            'decision_garantie',
+            "Garantie {$request->statut_garantie} pour l'OR {$ordresReparation->numero} — motif : {$motif}",
+            $ordresReparation
+        );
+
         return back()->with('success', 'Décision garantie enregistrée.');
+    }
+
+    /**
+     * Résout le palier kilométrique du barème constructeur à appliquer pour
+     * un entretien périodique.
+     *
+     * Priorité au dernier entretien réellement effectué sur ce véhicule (on
+     * avance simplement au palier suivant du barème) plutôt qu'un recalcul
+     * brut depuis le kilométrage — beaucoup de clients reviennent bien après
+     * l'échéance théorique. Marge de tolérance : ±100 km autour du palier
+     * visé est considéré atteint ; au-delà de +500 km de dépassement, on
+     * applique quand même ce palier mais on le signale (voir show.blade.php).
+     */
+    private function resoudrePalierEntretien(Vehicule $vehicule, int $kmActuel, int $typeMoteurId): ?int
+    {
+        // "Huile moteur" est présente à chaque vraie colonne du tableau constructeur
+        // (et nulle part ailleurs) — on s'en sert comme référence de la grille des
+        // paliers, pour ne pas la confondre avec les seuils informatifs isolés
+        // (ex: huile de boîte à 50 000 km, courroie de distribution à 80 000 km...).
+        $paliers = EntretienTache::where('type_moteur_id', $typeMoteurId)
+            ->where('designation', 'Huile moteur')
+            ->orderBy('km_seuil')
+            ->pluck('km_seuil')
+            ->all();
+
+        if (empty($paliers)) return null;
+
+        $dernierEntretien = OrdreReparation::where('vehicule_id', $vehicule->id)
+            ->where('type', 'entretien')
+            ->whereNotNull('entretien_km_seuil')
+            ->latest('date_entree')
+            ->first();
+
+        if ($dernierEntretien) {
+            // On avance d'un cran dans le barème par rapport au dernier entretien fait
+            $suivants = array_values(array_filter($paliers, fn ($p) => $p > $dernierEntretien->entretien_km_seuil));
+            $palierVise = $suivants[0] ?? end($paliers);
+        } else {
+            // Pas d'historique : le plus grand palier déjà atteint (≤ km actuel), sinon le premier palier du barème
+            $atteints = array_values(array_filter($paliers, fn ($p) => $p <= $kmActuel + self::ENTRETIEN_MARGE_PROCHE));
+            $palierVise = empty($atteints) ? $paliers[0] : end($atteints);
+        }
+
+        return $palierVise;
+    }
+
+    /**
+     * Crée automatiquement un devis brouillon avec les pièces à remplacer
+     * du barème constructeur pour le palier résolu. Le chef de garage n'a
+     * plus qu'à ajouter la main d'œuvre et les prix des pièces.
+     */
+    private function genererDevisEntretien(OrdreReparation $or, int $typeMoteurId, int $palier): void
+    {
+        $piecesARemplacer = EntretienTache::where('type_moteur_id', $typeMoteurId)
+            ->where('km_seuil', $palier)
+            ->where('action', 'remplacer')
+            ->orderBy('designation')
+            ->get();
+
+        if ($piecesARemplacer->isEmpty()) return;
+
+        DB::transaction(function () use ($or, $piecesARemplacer) {
+            $devis = Devis::create([
+                'numero'   => Devis::genererNumero(),
+                'or_id'    => $or->id,
+                'taux_tva' => 10,
+                'statut'   => 'brouillon',
+            ]);
+
+            foreach ($piecesARemplacer as $tache) {
+                LigneDevis::create([
+                    'devis_id'      => $devis->id,
+                    'type'          => 'piece',
+                    'designation'   => $tache->designation,
+                    'quantite'      => 1,
+                    'prix_unitaire' => 0,
+                    'total_ht'      => 0,
+                ]);
+            }
+        });
     }
 }

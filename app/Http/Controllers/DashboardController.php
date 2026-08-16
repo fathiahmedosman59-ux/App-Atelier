@@ -56,7 +56,7 @@ class DashboardController extends Controller
             ->limit(5)
             ->get();
 
-        // ── Bons de commande pièces non encore reçus (magasinier) ────
+        // ── Bons de commande pièces non encore reçus ──────────────────
         $bons_commande_en_attente = BonCommande::with(['ordreReparation'])
             ->whereIn('statut', ['brouillon', 'commande'])
             ->orderByDesc('created_at')

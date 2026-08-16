@@ -4,13 +4,15 @@
 @section('page-subtitle', $ordres->total() . ' OR enregistré(s)')
 
 @section('header-actions')
-<a href="{{ route('ordres-reparations.create') }}"
+@if(auth()->user()->hasPermission('creer_dossiers'))
+<a href="{{ route('reception.index') }}"
    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
     </svg>
     Nouvelle Réception
 </a>
+@endif
 @endsection
 
 @section('content')
@@ -69,12 +71,15 @@
             </svg>
         </div>
         <p class="text-slate-600 font-medium">Aucun ordre de réparation</p>
-        <a href="{{ route('ordres-reparations.create') }}" class="mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+        @if(auth()->user()->hasPermission('creer_dossiers'))
+        <a href="{{ route('reception.index') }}" class="mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
             Créer un OR
         </a>
+        @endif
     </div>
     @else
-    <table class="w-full">
+    <div class="overflow-x-auto">
+    <table class="w-full min-w-[900px]">
         <thead>
             <tr class="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 <th class="text-left px-6 py-3">N° OR</th>
@@ -135,6 +140,7 @@
             @endforeach
         </tbody>
     </table>
+    </div>
     <div class="px-6 py-4 border-t border-gray-100">{{ $ordres->links() }}</div>
     @endif
 </div>

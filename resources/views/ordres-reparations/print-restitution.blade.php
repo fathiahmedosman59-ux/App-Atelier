@@ -9,6 +9,10 @@
         html, body { width: 210mm; }
         body { font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
         .page { width: 210mm; min-height: 297mm; padding: 10mm; }
+        @media screen {
+            html, body { width: 100%; background: #d1d5db; }
+            .page { margin: 55px auto 40px; box-shadow: 0 4px 24px rgba(0,0,0,.18); }
+        }
 
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
         .header .logo-text { font-size: 18px; font-weight: bold; color: #1e293b; }
@@ -40,6 +44,8 @@
         .equip-diff { color: #dc2626; font-weight: bold; font-size: 9px; }
 
         .dommage-tag { display: inline-block; background: #fee2e2; border: 1px solid #fca5a5; color: #b91c1c; padding: 2px 6px; border-radius: 4px; margin: 2px; font-size: 9px; }
+        .dommage-tag-sortie { display: inline-block; background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; padding: 2px 6px; border-radius: 4px; margin: 2px; font-size: 9px; font-weight: bold; }
+        .ok-badge { display: inline-block; background: #dcfce7; border: 1px solid #86efac; color: #166534; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
 
         .carburant-bar { width: 80px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
         .carburant-fill-blue { height: 100%; background: #3b82f6; border-radius: 4px; }
@@ -62,11 +68,13 @@
 <div class="page">
 
     {{-- Bouton impression --}}
-    <div class="no-print" style="text-align:right; margin-bottom:10px;">
-        <button onclick="window.print()" style="background:#16a34a;color:white;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
-            🖨 Imprimer la fiche
-        </button>
-        <a href="{{ route('ordres-reparations.show', $or) }}" style="margin-left:10px;color:#64748b;font-size:12px;">← Retour</a>
+    <div class="no-print" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:99;">
+        @if(request('apercu'))
+        <button onclick="window.close()" style="background:#dc2626;color:#fff;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">← Fermer</button>
+        @else
+        <a href="{{ route('ordres-reparations.show', $or) }}" style="background:#dc2626;color:#fff;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;text-decoration:none;">← Retour</a>
+        @endif
+        <button onclick="window.print()" style="background:#16a34a;color:white;border:none;padding:8px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">🖨 Imprimer</button>
     </div>
 
     {{-- En-tête --}}
@@ -180,17 +188,97 @@
         </div>
     </div>
 
-    {{-- Dommages à l'entrée --}}
-    @if(!empty($or->dommages_carrosserie))
+    {{-- Schéma carrosserie — comparatif entrée / sortie --}}
     <div class="section">
-        <h3>DOMMAGES CONSTATÉS À L'ENTRÉE (référence)</h3>
+        <h3>SCHÉMA CARROSSERIE — COMPARATIF ENTRÉE / SORTIE</h3>
         <div class="section-body">
-            @foreach($or->dommages_carrosserie as $zone)
-            <span class="dommage-tag">{{ $zone }}</span>
-            @endforeach
+            @php
+                $zoneMap = [
+                    'Pare-choc avant'      => ['x'=>52,'y'=>24, 'w'=>96,'h'=>28, 'rx'=>16],
+                    'Aile avant gauche'    => ['x'=>52,'y'=>52, 'w'=>22,'h'=>40, 'rx'=>0],
+                    'Capot'                => ['x'=>74,'y'=>52, 'w'=>52,'h'=>40, 'rx'=>0],
+                    'Aile avant droite'    => ['x'=>126,'y'=>52,'w'=>22,'h'=>40, 'rx'=>0],
+                    'Porte avant gauche'   => ['x'=>52,'y'=>92, 'w'=>22,'h'=>72, 'rx'=>0],
+                    'Toit'                 => ['x'=>74,'y'=>92, 'w'=>52,'h'=>136,'rx'=>0],
+                    'Porte avant droite'   => ['x'=>126,'y'=>92,'w'=>22,'h'=>72, 'rx'=>0],
+                    'Porte arrière gauche' => ['x'=>52,'y'=>164,'w'=>22,'h'=>64, 'rx'=>0],
+                    'Porte arrière droite' => ['x'=>126,'y'=>164,'w'=>22,'h'=>64,'rx'=>0],
+                    'Aile arrière gauche'  => ['x'=>52,'y'=>228,'w'=>22,'h'=>40, 'rx'=>0],
+                    'Coffre'               => ['x'=>74,'y'=>228,'w'=>52,'h'=>40, 'rx'=>0],
+                    'Aile arrière droite'  => ['x'=>126,'y'=>228,'w'=>22,'h'=>40,'rx'=>0],
+                    'Pare-choc arrière'    => ['x'=>52,'y'=>268,'w'=>96,'h'=>38, 'rx'=>16],
+                ];
+                $entree = $or->dommages_carrosserie ?? [];
+                $sortie = $or->dommages_carrosserie_sortie ?? [];
+                $entreeHorsSchema = array_diff($entree, array_keys($zoneMap));
+            @endphp
+            <div style="display:flex;gap:15px;align-items:flex-start;">
+                <div>
+                    <svg width="140" height="240" viewBox="0 0 200 330" style="-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                        <defs>
+                            <pattern id="hachureRouge" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                                <rect width="6" height="6" fill="#fecaca"/>
+                                <line x1="0" y1="0" x2="0" y2="6" stroke="#dc2626" stroke-width="2.5"/>
+                            </pattern>
+                            <pattern id="hachureAmbre" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                                <rect width="6" height="6" fill="#fde68a"/>
+                                <line x1="0" y1="0" x2="0" y2="6" stroke="#b45309" stroke-width="2.5"/>
+                            </pattern>
+                        </defs>
+                        <rect x="52" y="24" width="96" height="282" rx="22" fill="#dbeafe" stroke="#000" stroke-width="2"/>
+                        <rect x="64" y="90" width="72" height="138" rx="7" fill="#bfdbfe" stroke="#000" stroke-width="1"/>
+                        <rect x="62" y="64" width="76" height="28" rx="4" fill="#e0f2fe" stroke="#000" stroke-width="1"/>
+                        <rect x="62" y="226" width="76" height="22" rx="4" fill="#e0f2fe" stroke="#000" stroke-width="1"/>
+                        <rect x="24"  y="34" width="26" height="44" rx="6" fill="#334155"/>
+                        <rect x="150" y="34" width="26" height="44" rx="6" fill="#334155"/>
+                        <rect x="24"  y="240" width="26" height="44" rx="6" fill="#334155"/>
+                        <rect x="150" y="240" width="26" height="44" rx="6" fill="#334155"/>
+                        <line x1="52"  y1="52"  x2="148" y2="52"  stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="52"  y1="92"  x2="148" y2="92"  stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="52"  y1="164" x2="148" y2="164" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="52"  y1="228" x2="148" y2="228" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="52"  y1="268" x2="148" y2="268" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="74"  y1="52"  x2="74"  y2="268" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        <line x1="126" y1="52"  x2="126" y2="268" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="3,3"/>
+                        @foreach($zoneMap as $zone => $z)
+                            @php $enSortie = in_array($zone, $sortie); $enEntree = in_array($zone, $entree); @endphp
+                            @if($enSortie || $enEntree)
+                            <rect x="{{ $z['x'] }}" y="{{ $z['y'] }}" width="{{ $z['w'] }}" height="{{ $z['h'] }}" rx="{{ $z['rx'] }}"
+                                  fill="url(#{{ $enSortie ? 'hachureRouge' : 'hachureAmbre' }})"
+                                  stroke="{{ $enSortie ? '#dc2626' : '#b45309' }}" stroke-width="2"/>
+                            @endif
+                        @endforeach
+                        <text x="100" y="15"  text-anchor="middle" font-size="9" fill="#000" font-weight="bold">AVANT</text>
+                        <text x="100" y="320" text-anchor="middle" font-size="9" fill="#000" font-weight="bold">ARRIÈRE</text>
+                        <text x="8"   y="168" text-anchor="middle" font-size="8" fill="#000" transform="rotate(-90,8,168)">GAUCHE</text>
+                        <text x="192" y="168" text-anchor="middle" font-size="8" fill="#000" transform="rotate(90,192,168)">DROIT</text>
+                    </svg>
+                </div>
+                <div style="flex:1;">
+                    <div style="font-size:9px;font-weight:bold;margin-bottom:4px;">DOMMAGES À L'ENTRÉE <span style="font-weight:normal;color:#b45309;">(▨ hachuré ambre, référence)</span> :</div>
+                    @if(count($entree) > 0)
+                        @foreach($entree as $d)
+                        <span class="dommage-tag">● {{ $d }}</span>
+                        @endforeach
+                    @else
+                        <span style="font-size:10px;color:#64748b;font-style:italic;">Aucun dommage signalé à l'entrée</span>
+                    @endif
+
+                    <div style="margin-top:10px;font-size:9px;font-weight:bold;margin-bottom:4px;">NOUVEAUX DOMMAGES À LA SORTIE <span style="font-weight:normal;color:#dc2626;">(▨ hachuré rouge)</span> :</div>
+                    @if(count($sortie) > 0)
+                        @foreach($sortie as $d)
+                        <span class="dommage-tag-sortie">⚠ {{ $d }}</span>
+                        @endforeach
+                    @else
+                        <span class="ok-badge">✓ Aucun — véhicule restitué dans l'état où il a été reçu</span>
+                    @endif
+                </div>
+            </div>
+            @if(!empty($entreeHorsSchema))
+            <div style="margin-top:8px;font-size:9px;color:#92400e;"><strong>Autres dommages notés à l'entrée (texte libre, hors schéma) :</strong> {{ implode(', ', $entreeHorsSchema) }}</div>
+            @endif
         </div>
     </div>
-    @endif
 
     {{-- Notes restitution --}}
     @if($or->notes_restitution)
@@ -218,8 +306,10 @@
 
 </div>
 <script>
+@if(!request('apercu'))
 window.onafterprint = function () { window.close(); };
 window.addEventListener('load', function () { setTimeout(window.print, 400); });
+@endif
 </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Facture;
 use App\Models\OrdreReparation;
+use App\Models\Technicien;
 use App\Models\User;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
@@ -57,20 +58,37 @@ class RapportController extends Controller
         $garanties = $baseQuery()->where('type', 'garantie')->count();
 
         // ── Par technicien : charge de travail et taux de complétion ──
-        $techniciens = User::where('role', 'mecanicien')
-            ->orderBy('name')
+        $techniciens = Technicien::where('actif', true)
+            ->orderBy('nom')
             ->get()
             ->map(function ($tech) use ($baseQuery) {
                 $q        = $baseQuery()->where('technicien_id', $tech->id);
                 $total    = $q->count();
                 $actifs   = (clone $q)->whereIn('statut', ['en_cours','diagnostic','controle_qualite','devis_accepte'])->count();
                 $termines = (clone $q)->whereIn('statut', ['pret','facture','livre'])->count();
+
+                // Performance réelle = durée estimée / durée nette (hors pauses) des travaux
+                // pointés — 100% = dans les temps, plus = plus rapide que prévu, moins = retard.
+                // "Charge" (ci-dessus) ne mesure que le volume d'OR, pas la vitesse d'exécution :
+                // ce chiffre-là répond à "qui est le plus performant".
+                // On exclut les travaux dont la durée nette est inférieure à 6 minutes : un OR
+                // démarré puis terminé quasi instantanément n'est jamais une vraie réparation
+                // (erreur de manipulation ou test) et fausserait la moyenne (ex: 5000%).
+                $performances = (clone $q)
+                    ->whereNotNull('heure_debut_travaux')->whereNotNull('heure_fin_travaux')->whereNotNull('duree_estimee')
+                    ->get()
+                    ->filter(fn ($or) => $or->getDureeNetteHeures() >= 0.1)
+                    ->map->getPerformance()
+                    ->filter(fn ($p) => $p !== null);
+
                 return [
-                    'id'       => $tech->id,
-                    'nom'      => $tech->name,
-                    'total'    => $total,
-                    'actifs'   => $actifs,
-                    'termines' => $termines,
+                    'id'                  => $tech->id,
+                    'nom'                 => $tech->name,
+                    'total'               => $total,
+                    'actifs'              => $actifs,
+                    'termines'            => $termines,
+                    'performance_moyenne' => $performances->isNotEmpty() ? (int) round($performances->avg()) : null,
+                    'nb_mesures'          => $performances->count(),
                 ];
             });
 

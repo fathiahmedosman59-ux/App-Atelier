@@ -5,7 +5,13 @@
 
 @section('header-actions')
 <div class="flex gap-2">
-    @if(auth()->user()->canManageWorkshop())
+    {{-- Tant que l'OR est de type garantie, il appartient exclusivement à
+         l'équipe garantie (approbation/refus via le module Garantie plus bas) —
+         le chef de garage ne peut pas en changer le statut, comme il ne peut
+         pas non plus l'affecter à un technicien (cf. bloc Affectation). Si la
+         garantie est refusée, le type redevient "normal" et ce contrôle
+         redevient disponible normalement. --}}
+    @if(auth()->user()->canManageWorkshop() && $or->type !== 'garantie')
     <form method="POST" action="{{ route('ordres-reparations.statut', $or) }}" class="flex items-center gap-2">
         @csrf @method('PATCH')
         <select name="statut" onchange="this.form.submit()"
@@ -15,24 +21,40 @@
             @endforeach
         </select>
     </form>
+    @elseif($or->type === 'garantie')
+    <span class="flex items-center gap-2 text-sm text-slate-400 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">
+        {{ $or->getStatutLabel() }} — géré par l'équipe garantie
+    </span>
     @endif
+    <a href="{{ route('ordres-reparations.imprimer', $or) }}?apercu=1" target="_blank"
+       class="flex items-center gap-2 text-sm border border-gray-300 text-slate-600 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
+        👁 Fiche réception
+    </a>
     <a href="{{ route('ordres-reparations.imprimer', $or) }}" target="_blank"
        class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
         🖨 Fiche réception
     </a>
     @if($or->isAffecte())
+    <a href="{{ route('ordres-reparations.feuille-travail', $or) }}?apercu=1" target="_blank"
+       class="flex items-center gap-2 text-sm border border-gray-300 text-slate-600 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
+        👁 Feuille travail
+    </a>
     <a href="{{ route('ordres-reparations.feuille-travail', $or) }}" target="_blank"
        class="flex items-center gap-2 text-sm bg-slate-700 hover:bg-slate-800 text-white rounded-lg px-3 py-2 transition-colors">
         📋 Feuille travail
     </a>
     @endif
-    @if($or->statut === 'facture' && ($or->facture?->peutEtreRestitue()) && (auth()->user()->isReceptionniste() || auth()->user()->isAdmin()))
+    @if(($or->statut === 'facture' && $or->facture?->peutEtreRestitue() || ($or->service_gratuit && $or->statut === 'pret')) && auth()->user()->hasPermission('restituer_vehicule'))
     <a href="{{ route('ordres-reparations.restitution', $or) }}"
        class="flex items-center gap-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-2 transition-colors font-bold">
         ✓ Restituer le véhicule
     </a>
     @endif
     @if($or->statut === 'livre')
+    <a href="{{ route('ordres-reparations.imprimer-restitution', $or) }}?apercu=1" target="_blank"
+       class="flex items-center gap-2 text-sm border border-gray-300 text-slate-600 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
+        👁 Fiche restitution
+    </a>
     <a href="{{ route('ordres-reparations.imprimer-restitution', $or) }}" target="_blank"
        class="flex items-center gap-2 text-sm bg-green-100 hover:bg-green-200 text-green-800 border border-green-300 rounded-lg px-3 py-2 transition-colors">
         🖨 Fiche restitution
@@ -43,7 +65,7 @@
        class="flex items-center gap-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-2 transition-colors">
         🧾 {{ $or->facture->statut === 'payee' ? 'Facture payée' : 'Encaisser' }}
     </a>
-    @elseif($or->statut === 'pret' && auth()->user()->hasPermission('creer_factures'))
+    @elseif($or->statut === 'pret' && ! $or->service_gratuit && auth()->user()->hasPermission('creer_factures'))
     <a href="{{ route('factures.create', $or) }}"
        class="flex items-center gap-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-2 transition-colors font-bold">
         🧾 Créer la facture
@@ -63,9 +85,40 @@
 @if(session('error'))
 <div class="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{{ session('error') }}</div>
 @endif
+@if($errors->any())
+<div class="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+    <ul class="space-y-1">
+        @foreach($errors->all() as $e)
+        <li class="text-sm text-red-700 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>{{ $e }}
+        </li>
+        @endforeach
+    </ul>
+</div>
+@endif
+
+{{-- ═══ BANNIÈRE ENTRETIEN EN RETARD ════ --}}
+@php
+    $depassementEntretien = ($or->type === 'entretien' && $or->entretien_km_seuil)
+        ? $or->kilometrage_entree - $or->entretien_km_seuil
+        : null;
+@endphp
+@if($depassementEntretien !== null && $depassementEntretien > 500)
+<div class="mb-4 bg-red-50 border border-red-300 rounded-2xl p-4 flex items-center gap-4">
+    <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+    </div>
+    <div class="flex-1">
+        <p class="text-sm font-bold text-red-700">Entretien en retard de {{ number_format($depassementEntretien) }} km</p>
+        <p class="text-xs text-red-600 mt-0.5">Le véhicule a dépassé le palier de {{ number_format($or->entretien_km_seuil) }} km ({{ $or->vehicule->typeMoteur?->libelle }}) — vérifiez si un palier intermédiaire a été sauté avant de valider le devis.</p>
+    </div>
+</div>
+@endif
 
 {{-- ═══ BANNIÈRE RÉCEPTIONNISTE — EN ATTENTE RÈGLEMENT ════ --}}
-@if($or->statut === 'facture' && $or->facture && !$or->facture->peutEtreRestitue() && (auth()->user()->isReceptionniste() || auth()->user()->isAdmin()))
+@if($or->statut === 'facture' && $or->facture && !$or->facture->peutEtreRestitue() && auth()->user()->hasPermission('restituer_vehicule'))
 <div class="mb-4 bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center gap-4">
     <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
         <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -79,8 +132,27 @@
 </div>
 @endif
 
+{{-- ═══ BANNIÈRE SERVICE GRATUIT — PRÊT SANS FACTURE ════════ --}}
+@if($or->service_gratuit && $or->statut === 'pret' && auth()->user()->hasPermission('restituer_vehicule'))
+<div class="mb-4 bg-teal-500 rounded-2xl p-5 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3 text-white">
+        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div>
+            <p class="font-bold text-lg">Service gratuit terminé — Prêt à restituer</p>
+            <p class="text-teal-100 text-sm">{{ $or->vehicule->immatriculation }} — {{ $or->client->nom_complet }} — pas de facturation nécessaire</p>
+        </div>
+    </div>
+    <a href="{{ route('ordres-reparations.restitution', $or) }}"
+       class="flex-shrink-0 bg-white text-teal-700 hover:bg-teal-50 font-black text-base px-6 py-3 rounded-xl transition-colors shadow-sm whitespace-nowrap">
+        ✓ Restituer le véhicule
+    </a>
+</div>
+@endif
+
 {{-- ═══ BANNIÈRE CAISSIER ══════════════════════════════════ --}}
-@if(auth()->user()->hasPermission('creer_factures'))
+@if(auth()->user()->hasPermission('creer_factures') && ! $or->service_gratuit)
     @if($or->statut === 'pret' && !$or->facture)
     <div class="mb-4 bg-green-500 rounded-2xl p-5 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3 text-white">
@@ -154,12 +226,25 @@
             </div>
         </div>
 
-        {{-- Pipeline --}}
+        {{-- Pipeline — uniquement les étapes qui se passent RÉELLEMENT pour cet OR.
+             "Diagnostic" et "Devis accepté" ont désormais lieu AVANT que l'OR n'existe (au
+             niveau du dossier de réception) : le statut du devis reste visible plus bas,
+             dans la carte "Devis", plutôt que de dupliquer ces étapes ici.
+             Un Service Rapide gratuit (tarif 0 — cf. service_gratuit) ne passe jamais par
+             le contrôle qualité, le lavage ni la facturation : le schéma s'adapte pour ne
+             montrer que le parcours réellement suivi (Ouvert → En cours → Prêt → Livré). --}}
         @php
-            $etapes  = ['ouvert','diagnostic','devis_accepte','en_cours','controle_qualite','lavage','pret','facture','livre'];
-            $labels  = ['Ouvert','Diagnostic','Accepté','En cours','Contrôle','Lavage','Prêt','Facturé','Livré'];
-            $courant = array_search($or->statut, $etapes);
-            if ($courant === false && in_array($or->statut, ['devis_envoye'])) $courant = 1;
+            if ($or->service_gratuit) {
+                $etapes = ['ouvert', 'en_cours', 'pret', 'livre'];
+                $labels = ['Ouvert', 'En cours', 'Prêt', 'Livré'];
+            } else {
+                $etapes = ['ouvert', 'en_cours', 'controle_qualite', 'lavage', 'pret', 'facture', 'livre'];
+                $labels = ['Ouvert', 'En cours', 'Contrôle', 'Lavage', 'Prêt', 'Facturé', 'Livré'];
+            }
+            // ouvert/diagnostic/devis_envoye/devis_accepte sont tous "avant le lancement des
+            // travaux" — on les regroupe sur l'étape "Ouvert" plutôt que de les distinguer.
+            $statutsAvantTravaux = ['ouvert', 'diagnostic', 'devis_envoye', 'devis_accepte'];
+            $courant = in_array($or->statut, $statutsAvantTravaux) ? 0 : array_search($or->statut, $etapes);
         @endphp
         <div class="flex items-center overflow-x-auto pb-2">
             @foreach($etapes as $i => $etape)
@@ -189,12 +274,12 @@
                 <span class="text-xs text-slate-400 font-normal">({{ $or->allDevis->count() }})</span>
                 @endif
             </h3>
-            @if(!$or->devis && auth()->user()->canManageWorkshop())
+            @if(!$or->devis && $or->type !== 'garantie' && auth()->user()->canManageWorkshop())
             <a href="{{ route('devis.create', $or) }}"
                class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
                 + Créer un devis
             </a>
-            @elseif($or->devis && $or->devis->statut === 'accepte' && auth()->user()->canManageWorkshop())
+            @elseif($or->devis && $or->devis->statut === 'accepte' && $or->type !== 'garantie' && auth()->user()->canManageWorkshop())
             <a href="{{ route('devis.create', $or) }}"
                class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
                 + Devis complémentaire
@@ -203,7 +288,11 @@
         </div>
 
         @if($or->allDevis->isEmpty())
+        @if($or->type === 'garantie')
+        <p class="text-sm text-slate-400 bg-gray-50 rounded-xl p-3">Panne en cours d'instruction par l'équipe garantie — pas de devis client tant que la garantie n'est pas refusée (voir module Garantie ci-dessous).</p>
+        @else
         <p class="text-sm text-slate-400 bg-gray-50 rounded-xl p-3">Aucun devis créé — créez un devis après le diagnostic.</p>
+        @endif
         @else
 
         {{-- Devis précédents (tous sauf le dernier) --}}
@@ -224,8 +313,12 @@
                         <p class="text-xs text-slate-400">HT : {{ number_format($dv->montant_ht, 0, ',', ' ') }} FDJ</p>
                     </div>
                     <div class="flex items-center gap-1">
+                        <a href="{{ route('devis.imprimer', $dv) }}?apercu=1" target="_blank"
+                           class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors" title="Aperçu">
+                            👁
+                        </a>
                         <a href="{{ route('devis.imprimer', $dv) }}" target="_blank"
-                           class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors">
+                           class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors" title="Imprimer">
                             🖨
                         </a>
                         <a href="{{ route('devis.show', $dv) }}" class="text-xs text-orange-500 hover:underline font-medium px-2">
@@ -236,8 +329,22 @@
             </div>
 
             {{-- Actions sur le dernier devis uniquement --}}
-            @if($isLast && in_array($dv->statut, ['brouillon','envoye']) && auth()->user()->canManageWorkshop())
+            @if($isLast && in_array($dv->statut, ['brouillon','envoye']) && auth()->user()->peutValiderDevis())
+            @php $dvAttendFournisseur = $dv->attendReponseFournisseur(); @endphp
+            @if($dvAttendFournisseur)
+            <p class="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                ⏳ En attente de la confirmation du fournisseur pour une ou plusieurs pièces.
+            </p>
+            @endif
             <div class="flex gap-2 mt-3">
+                @if($dvAttendFournisseur)
+                <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                        class="flex-1 bg-gray-200 text-gray-400 text-xs font-bold py-2 rounded-xl cursor-not-allowed">📤 Envoyé au client</button>
+                <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                        class="flex-1 bg-gray-200 text-gray-400 text-xs font-bold py-2 rounded-xl cursor-not-allowed">✓ Client a accepté</button>
+                <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                        class="flex-1 bg-gray-200 text-gray-400 text-xs font-bold py-2 rounded-xl cursor-not-allowed">✗ Refusé</button>
+                @else
                 <form method="POST" action="{{ route('devis.envoyer', $dv) }}" class="flex-1">
                     @csrf @method('PATCH')
                     <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2 rounded-xl transition-colors">📤 Envoyé au client</button>
@@ -250,13 +357,16 @@
                     @csrf @method('PATCH')
                     <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 rounded-xl transition-colors" onclick="return confirm('Confirmer le refus ?')">✗ Refusé</button>
                 </form>
+                @endif
             </div>
+            @if(! $dvAttendFournisseur)
             <form method="POST" action="{{ route('devis.upload-signature', $dv) }}" enctype="multipart/form-data" class="flex gap-2 mt-2">
                 @csrf @method('PATCH')
                 <input type="file" name="fichier_signe" accept=".pdf,.jpg,.jpeg,.png"
                        class="flex-1 text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-orange-600">
                 <button type="submit" class="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl">Upload devis signé</button>
             </form>
+            @endif
             @endif
         </div>
         @endforeach
@@ -265,7 +375,7 @@
     </div>
 
     {{-- Bon de commande pièces --}}
-    @if($or->devis && $or->devis->bonCommande && auth()->user()->peutGererBonsCommande())
+    @if($or->devis && $or->devis->bonCommande && auth()->user()->peutVoirBonsCommande())
     @php $bc = $or->devis->bonCommande; @endphp
     <div class="bg-white rounded-2xl border-2 border-{{ $bc->getStatutColor() }}-300 p-5">
         <div class="flex items-center justify-between">
@@ -284,13 +394,9 @@
                 </span>
             </div>
             <div class="flex items-center gap-2">
-                <a href="{{ route('bons-commande.imprimer', $bc) }}" target="_blank"
-                   class="text-xs text-slate-500 hover:text-slate-800 border border-gray-200 rounded-lg px-2 py-1 transition-colors">
-                    🖨 Imprimer BC
-                </a>
                 <a href="{{ route('bons-commande.show', $bc) }}"
                    class="text-xs bg-teal-500 hover:bg-teal-600 text-white font-bold px-3 py-1.5 rounded-lg transition-colors">
-                    Gérer →
+                    Voir →
                 </a>
             </div>
         </div>
@@ -331,12 +437,37 @@
                     {{ $or->heure_fin_travaux ? $or->heure_fin_travaux->format('H:i') : '—' }}
                 </p>
                 @if($or->heure_fin_travaux)
-                <p class="text-xs text-green-400">Durée réelle : {{ $or->formatDuree($or->getDureeReelleHeures()) }}</p>
+                <p class="text-xs text-green-400">Écoulé : {{ $or->formatDuree($or->getDureeReelleHeures()) }}</p>
                 @endif
             </div>
         </div>
 
-        {{-- Performance --}}
+        {{-- Durée nette (hors pauses) --}}
+        @if($or->heure_debut_travaux && $or->heure_fin_travaux)
+        @php
+            $dureeNette  = $or->getDureeNetteHeures();
+            $dureeBreute = $or->getDureeReelleHeures();
+            $pausesDeduit = round($dureeBreute - $dureeNette, 2);
+        @endphp
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-indigo-50 rounded-xl p-3 text-center">
+                <p class="text-xs text-indigo-400 mb-1">Durée nette (hors pauses)</p>
+                <p class="font-bold text-indigo-800 text-lg">{{ $or->formatDuree($dureeNette) }}</p>
+                @if($pausesDeduit > 0)
+                <p class="text-xs text-indigo-400">{{ $or->formatDuree($pausesDeduit) }} de pause déduits</p>
+                @else
+                <p class="text-xs text-indigo-300">Aucune pause sur cette plage</p>
+                @endif
+            </div>
+            <div class="bg-gray-50 rounded-xl p-3 text-center">
+                <p class="text-xs text-slate-400 mb-1">Temps total écoulé</p>
+                <p class="font-bold text-slate-600 text-lg">{{ $or->formatDuree($dureeBreute) }}</p>
+                <p class="text-xs text-slate-400">Pauses incluses</p>
+            </div>
+        </div>
+        @endif
+
+        {{-- Performance basée sur la durée nette --}}
         @if($or->getPerformance() !== null)
         @php $perf = $or->getPerformance(); @endphp
         <div class="bg-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-50 border border-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-200 rounded-xl p-4 mb-4">
@@ -350,14 +481,15 @@
                 </p>
                 <span class="text-2xl font-black text-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-600">{{ $perf }}%</span>
             </div>
+            <p class="text-xs text-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-600 mt-1 mb-2">Calculé sur la durée nette (pauses exclues)</p>
             <div class="mt-2 h-2 bg-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-200 rounded-full">
                 <div class="h-full bg-{{ $perf >= 100 ? 'green' : ($perf >= 80 ? 'yellow' : 'red') }}-500 rounded-full" style="width: {{ min(100, $perf) }}%"></div>
             </div>
         </div>
         @endif
 
-        {{-- Boutons pointage --}}
-        @if(auth()->id() === $or->technicien_id || auth()->user()->canManageWorkshop())
+        {{-- Boutons pointage — le technicien n'a pas de compte, c'est le chef qui pointe pour lui --}}
+        @if(auth()->user()->canManageWorkshop())
         <div class="flex gap-3 flex-wrap">
             @if(!$or->heure_debut_travaux)
             <form method="POST" action="{{ route('ordres-reparations.demarrer', $or) }}" class="flex-1">
@@ -414,7 +546,7 @@
     @endif
 
     {{-- Facturation --}}
-    @if($or->statut === 'pret' && !$or->facture && auth()->user()->hasPermission('creer_factures'))
+    @if($or->statut === 'pret' && !$or->facture && ! $or->service_gratuit && auth()->user()->hasPermission('creer_factures'))
     <div class="bg-white rounded-2xl border-2 border-green-300 p-6">
         <h3 class="font-semibold text-slate-800 mb-3 flex items-center gap-2">
             <span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Véhicule prêt — Créer la facture
@@ -526,6 +658,7 @@
                 </a>
             </div>
             @endif
+            @if(auth()->user()->hasPermission('creer_dossiers'))
             <form method="POST" action="{{ route('ordres-reparations.upload-fiche', $or) }}" enctype="multipart/form-data" class="flex gap-2 items-center">
                 @csrf @method('PATCH')
                 <input type="file" name="fiche_signee" accept=".pdf,.jpg,.jpeg,.png" required
@@ -535,13 +668,45 @@
                 </button>
             </form>
             <p class="text-xs text-slate-400 mt-1">PDF, JPG ou PNG — max 10 Mo</p>
+            @endif
         </div>
     </div>
 
-    {{-- Garantie --}}
-    @if($or->type === 'garantie')
+    {{-- Fiche de restitution signée — visible une fois le véhicule livré --}}
+    @if($or->statut === 'livre' && auth()->user()->hasPermission('restituer_vehicule'))
+    <div class="bg-white rounded-2xl border border-gray-200 p-6">
+        <h3 class="font-semibold text-slate-800 mb-3">Fiche de restitution signée</h3>
+        @if($or->fiche_signee_restitution)
+        <div class="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-3">
+            <div class="flex items-center gap-2 text-sm text-green-700">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Fiche signée enregistrée
+            </div>
+            <a href="{{ asset('storage/' . $or->fiche_signee_restitution) }}" target="_blank"
+               class="text-xs font-bold text-green-700 hover:text-green-900 underline">
+                Voir / Télécharger
+            </a>
+        </div>
+        @endif
+        <form method="POST" action="{{ route('ordres-reparations.upload-fiche-restitution', $or) }}" enctype="multipart/form-data" class="flex gap-2 items-center">
+            @csrf @method('PATCH')
+            <input type="file" name="fiche_signee_restitution" accept=".pdf,.jpg,.jpeg,.png" required
+                   class="flex-1 text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-orange-600 hover:file:bg-orange-100">
+            <button type="submit" class="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                {{ $or->fiche_signee_restitution ? 'Remplacer' : 'Uploader' }}
+            </button>
+        </form>
+        <p class="text-xs text-slate-400 mt-1">PDF, JPG ou PNG — max 10 Mo</p>
+    </div>
+    @endif
+
+    {{-- Garantie — reste visible même après un refus (l'OR redevient "normal" mais l'historique doit rester consultable) --}}
+    @if($or->type === 'garantie' || $or->statut_garantie === 'refuse')
     <div class="bg-white rounded-2xl border-2 {{ $or->statut_garantie === 'approuve' ? 'border-green-300' : ($or->statut_garantie === 'refuse' ? 'border-red-300' : 'border-yellow-300') }} p-6">
         <h3 class="font-semibold text-slate-800 mb-4">Module Garantie</h3>
+        @if($or->statut_garantie === 'refuse')
+        <p class="text-xs text-slate-400 mb-3">Cette demande de garantie a été refusée — l'OR suit maintenant le parcours normal (devis → travaux → facturation client).</p>
+        @endif
         @if($or->statut_garantie === 'en_attente')
         <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
             <p class="text-sm text-yellow-800 font-medium">⏳ En attente de validation</p>
@@ -550,17 +715,28 @@
         <form method="POST" action="{{ route('ordres-reparations.garantie', $or) }}" class="space-y-3">
             @csrf @method('PATCH')
             <div class="grid grid-cols-2 gap-3">
-                <button type="submit" name="statut_garantie" value="approuve" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-xl text-sm">✓ Approuver</button>
+                <button type="button" onclick="document.getElementById('motif_approbation').classList.toggle('hidden')" class="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-xl text-sm">✓ Approuver</button>
                 <button type="button" onclick="document.getElementById('motif_refus').classList.toggle('hidden')" class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-xl text-sm">✗ Refuser</button>
             </div>
+            <div id="motif_approbation" class="hidden space-y-2">
+                <textarea name="motif_approbation_garantie" rows="2" required placeholder="Motif de l'approbation..." class="w-full px-4 py-2 border border-green-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"></textarea>
+                <button type="submit" name="statut_garantie" value="approuve" class="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded-xl text-sm">Confirmer l'approbation</button>
+            </div>
             <div id="motif_refus" class="hidden space-y-2">
-                <textarea name="motif_refus_garantie" rows="2" placeholder="Motif du refus..." class="w-full px-4 py-2 border border-red-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"></textarea>
+                <textarea name="motif_refus_garantie" rows="2" required placeholder="Motif du refus..." class="w-full px-4 py-2 border border-red-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"></textarea>
+                <label class="flex items-start gap-2 cursor-pointer bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                    <input type="checkbox" name="sortie_garantie" value="1" class="w-4 h-4 mt-0.5 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                    <span class="text-xs text-red-700">Ce véhicule est <strong>définitivement</strong> sorti de la garantie constructeur — il ne sera plus jamais proposé au circuit garantie, décision irréversible.</span>
+                </label>
                 <button type="submit" name="statut_garantie" value="refuse" class="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 rounded-xl text-sm">Confirmer le refus</button>
             </div>
         </form>
         @endif
         @elseif($or->statut_garantie === 'approuve')
-        <div class="bg-green-50 border border-green-200 rounded-xl p-4"><p class="text-sm text-green-800 font-medium">✓ Garantie approuvée</p></div>
+        <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <p class="text-sm text-green-800 font-medium">✓ Garantie approuvée</p>
+            @if($or->motif_approbation_garantie)<p class="text-xs text-green-600 mt-1">{{ $or->motif_approbation_garantie }}</p>@endif
+        </div>
         @elseif($or->statut_garantie === 'refuse')
         <div class="bg-red-50 border border-red-200 rounded-xl p-4">
             <p class="text-sm text-red-800 font-medium">✗ Garantie refusée</p>
@@ -614,8 +790,10 @@
         <a href="{{ route('vehicules.show', $or->vehicule) }}" class="block mt-3 text-xs text-orange-500 hover:underline">Voir la fiche véhicule →</a>
     </div>
 
-    {{-- Affectation technicien --}}
-    @if(auth()->user()->canManageWorkshop())
+    {{-- Affectation technicien — pas d'affectation tant que l'OR est de type garantie : la prise
+         en charge est gérée par l'équipe garantie. Si la garantie est refusée, l'OR redevient
+         "normal" (cf. changerStatutGarantie) et l'affectation redevient possible normalement. --}}
+    @if(auth()->user()->canManageWorkshop() && $or->type !== 'garantie')
     @php
         $bcBloquant = $or->bonsCommande()->whereIn('statut', ['en_attente', 'commande'])->first();
     @endphp
@@ -642,17 +820,15 @@
         {{-- BC pièces pas encore reçu — bloquer l'affectation --}}
         <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
             <p class="font-bold mb-1">⏳ En attente des pièces</p>
-            <p>Le bon de commande <span class="font-mono font-bold">{{ $bcBloquant->numero }}</span> est
-                <span class="font-bold">{{ $bcBloquant->statut === 'en_attente' ? 'en attente de commande' : 'commandé' }}</span>.
-            </p>
-            <p class="mt-1">Le magasinier doit marquer <strong>"Tout reçu"</strong> avant de pouvoir affecter un mécanicien.</p>
+            <p>Le bon de commande <span class="font-mono font-bold">{{ $bcBloquant->numero }}</span> n'est pas encore reçu au garage.</p>
+            <p class="mt-1">Le chef de garage (ou l'admin) doit marquer <strong>"Tout reçu"</strong> avant de pouvoir affecter un technicien.</p>
         </div>
         @else
         <form method="POST" action="{{ route('ordres-reparations.affecter', $or) }}" class="space-y-2 mt-2">
             @csrf @method('PATCH')
             <select name="technicien_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
-                <option value="">Choisir un mécanicien</option>
-                @foreach(\App\Models\User::where('role', 'mecanicien')->orderBy('name')->get() as $tech)
+                <option value="">Choisir un technicien</option>
+                @foreach(\App\Models\Technicien::where('actif', true)->orderBy('nom')->get() as $tech)
                 <option value="{{ $tech->id }}" {{ $or->technicien_id == $tech->id ? 'selected' : '' }}>{{ $tech->name }}</option>
                 @endforeach
             </select>
@@ -662,17 +838,27 @@
                 <option value="{{ $val }}" {{ $or->service === $val ? 'selected' : '' }}>{{ $label }}</option>
                 @endforeach
             </select>
+            @php
+                $dureeReservation = $or->dossier?->reservation?->duree_estimee;
+                $dureeDevisSomme  = $or->allDevis->flatMap->lignes->where('type', 'main_oeuvre')->sum('quantite');
+                $dureeSuggeree    = $or->duree_estimee ?? $dureeReservation ?? ($dureeDevisSomme > 0 ? $dureeDevisSomme : null);
+            @endphp
             <div class="flex gap-2">
-                <input type="number" name="duree_estimee" value="{{ $or->duree_estimee }}" placeholder="Durée estimée (h)" min="0.5" step="0.5"
+                <input type="number" name="duree_estimee" value="{{ $dureeSuggeree }}" placeholder="Durée estimée (h)" min="0.25" step="0.25"
                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
+            @if(!$or->duree_estimee && $dureeReservation)
+            <p class="text-xs text-teal-600">Reprise de la durée réservée ({{ $dureeReservation }} h) — modifiable.</p>
+            @elseif(!$or->duree_estimee && !$dureeReservation && $dureeDevisSomme > 0)
+            <p class="text-xs text-teal-600">Somme des mains d'œuvre du devis ({{ $dureeDevisSomme }} h) — modifiable.</p>
+            @endif
             <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-xl text-sm transition-colors">
                 {{ $or->isAffecte() ? 'Réaffecter' : 'Affecter' }}
             </button>
         </form>
         @endif
     </div>
-    @elseif($or->technicien)
+    @elseif($or->technicien && $or->type !== 'garantie')
     <div class="bg-white rounded-2xl border border-gray-200 p-5">
         <h3 class="text-sm font-semibold text-slate-700 mb-3">Technicien assigné</h3>
         <div class="flex items-center gap-3">

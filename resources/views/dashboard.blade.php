@@ -4,8 +4,8 @@
 @section('page-subtitle', 'Bienvenue, ' . auth()->user()->name . ' — ' . now()->format('d/m/Y'))
 
 @section('header-actions')
-@if(auth()->user()->hasPermission('gerer_ordres'))
-<a href="{{ route('ordres-reparations.create') }}"
+@if(auth()->user()->hasPermission('creer_dossiers'))
+<a href="{{ route('reception.index') }}"
    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
@@ -16,6 +16,31 @@
 @endsection
 
 @section('content')
+
+{{-- ── Barre de recherche rapide ────────────────────────────── --}}
+<div class="mb-5">
+    <form method="GET" action="{{ route('recherche') }}" class="relative">
+        <div class="flex items-center bg-white dark:bg-slate-800 border-2 border-gray-200 dark:border-slate-600
+                    hover:border-orange-300 focus-within:border-orange-500 rounded-2xl transition-colors shadow-sm">
+            <div class="pl-5 flex-shrink-0">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+            <input type="text"
+                   name="q"
+                   placeholder="Rechercher un véhicule par immatriculation ou un client par nom…"
+                   autofocus
+                   class="flex-1 px-4 py-4 bg-transparent text-slate-800 dark:text-slate-100
+                          placeholder-slate-400 text-sm focus:outline-none">
+            <button type="submit"
+                    class="flex-shrink-0 m-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600
+                           text-white text-sm font-semibold rounded-xl transition-colors">
+                Rechercher
+            </button>
+        </div>
+    </form>
+</div>
 
 {{-- ── Centre d'alertes ─────────────────────────────────────── --}}
 @php $nbAlertes = ($or_en_retard->isNotEmpty() ? 1 : 0) + ($stats['or_garantie'] > 0 ? 1 : 0); @endphp
@@ -334,7 +359,7 @@
                class="flex items-center justify-between p-3 rounded-xl bg-blue-50 hover:bg-blue-100 transition-colors">
                 <div>
                     <p class="text-xs font-bold text-slate-800 font-mono">{{ $devis->numero }}</p>
-                    <p class="text-xs text-slate-500 mt-0.5">{{ $devis->ordreReparation->client->nom_complet }} — {{ $devis->ordreReparation->vehicule->immatriculation }}</p>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ $devis->parent->client->nom_complet }} — {{ $devis->parent->vehicule->immatriculation }}</p>
                 </div>
                 <div class="text-right flex-shrink-0">
                     <p class="text-xs font-bold text-blue-600">{{ number_format($devis->montant_ttc, 0, ',', ' ') }} FDJ</p>
@@ -435,8 +460,8 @@
                     $liens[] = ['href' => route('clients.create'),            'label' => 'Nouveau client',     'color' => 'blue'];
                 if(auth()->user()->hasPermission('gerer_vehicules'))
                     $liens[] = ['href' => route('vehicules.create'),          'label' => 'Nouveau véhicule',   'color' => 'purple'];
-                if(auth()->user()->hasPermission('gerer_ordres'))
-                    $liens[] = ['href' => route('ordres-reparations.create'), 'label' => 'Nouvelle Réception', 'color' => 'orange'];
+                if(auth()->user()->hasPermission('creer_dossiers'))
+                    $liens[] = ['href' => route('reception.index'), 'label' => 'Nouvelle Réception', 'color' => 'orange'];
                 if(auth()->user()->hasPermission('voir_factures'))
                     $liens[] = ['href' => route('factures.index', ['statut' => 'emise']), 'label' => 'Factures à encaisser', 'color' => 'green'];
                 @endphp

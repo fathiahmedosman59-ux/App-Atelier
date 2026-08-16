@@ -16,21 +16,21 @@ class GarantieController extends Controller
             ->whereNull('lu_at')
             ->update(['lu_at' => now()]);
 
-        $enAttente = OrdreReparation::where('type', 'garantie')
-            ->where('statut_garantie', 'en_attente')
+        // Pas de filtre sur `type` : un OR refusé redevient "normal" (cf.
+        // OrdreReparationController::changerStatutGarantie) mais doit rester
+        // visible dans l'historique "Refusé" de l'équipe garantie.
+        $enAttente = OrdreReparation::where('statut_garantie', 'en_attente')
             ->with(['client', 'vehicule', 'conseiller'])
             ->latest()
             ->get();
 
-        $approuves = OrdreReparation::where('type', 'garantie')
-            ->where('statut_garantie', 'approuve')
+        $approuves = OrdreReparation::where('statut_garantie', 'approuve')
             ->with(['client', 'vehicule'])
             ->latest()
             ->limit(30)
             ->get();
 
-        $refuses = OrdreReparation::where('type', 'garantie')
-            ->where('statut_garantie', 'refuse')
+        $refuses = OrdreReparation::where('statut_garantie', 'refuse')
             ->with(['client', 'vehicule'])
             ->latest()
             ->limit(30)

@@ -17,7 +17,7 @@
     </a>
     @endif
     @endif
-    @if(auth()->user()->canManageWorkshop())
+    @if(auth()->user()->hasPermission('gerer_vehicules'))
     <a href="{{ route('vehicules.create', ['client_id' => $client->id]) }}"
        class="flex items-center gap-2 border border-gray-300 text-slate-700 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -25,7 +25,9 @@
         </svg>
         Ajouter véhicule
     </a>
-    <a href="{{ route('ordres-reparations.create', ['client_id' => $client->id]) }}"
+    @endif
+    @if(auth()->user()->hasPermission('creer_dossiers'))
+    <a href="{{ route('reception.index', ['client_id' => $client->id]) }}"
        class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
@@ -33,7 +35,7 @@
         Nouvelle Réception
     </a>
     @endif
-    @if(auth()->user()->canManageWorkshop() && (!in_array($client->type, ['societe','assurance']) || auth()->user()->peutGererClientSociete()))
+    @if(auth()->user()->hasPermission('gerer_clients') && (!in_array($client->type, ['societe','assurance']) || auth()->user()->peutGererClientSociete()))
     <a href="{{ route('clients.edit', $client) }}"
        class="flex items-center gap-2 border border-gray-300 text-slate-700 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -171,7 +173,7 @@
         <div class="bg-white rounded-2xl border border-gray-200 p-5">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="font-semibold text-slate-800">Véhicules</h3>
-                @if(auth()->user()->canManageWorkshop())
+                @if(auth()->user()->hasPermission('gerer_vehicules'))
                 <a href="{{ route('vehicules.create', ['client_id' => $client->id]) }}"
                    class="text-sm text-orange-500 hover:text-orange-600 font-medium">+ Ajouter</a>
                 @endif
@@ -214,8 +216,8 @@
         <div class="bg-white rounded-2xl border border-gray-200 p-5">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="font-semibold text-slate-800">Historique des interventions</h3>
-                @if(auth()->user()->canManageWorkshop())
-                <a href="{{ route('ordres-reparations.create', ['client_id' => $client->id]) }}"
+                @if(auth()->user()->hasPermission('creer_dossiers'))
+                <a href="{{ route('reception.index', ['client_id' => $client->id]) }}"
                    class="text-sm text-orange-500 hover:text-orange-600 font-medium">+ Nouvelle Réception</a>
                 @endif
             </div>

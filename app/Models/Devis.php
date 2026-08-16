@@ -24,7 +24,7 @@ class Devis extends Model
     protected $table = 'devis';
 
     protected $fillable = [
-        'numero', 'or_id', 'statut', 'date_envoi', 'date_validation',
+        'numero', 'or_id', 'dossier_id', 'statut', 'date_envoi', 'date_validation',
         'fichier_signe', 'notes', 'montant_ht', 'taux_tva', 'montant_tva', 'montant_ttc',
     ];
 
@@ -39,10 +39,16 @@ class Devis extends Model
 
     // ── Relations ──────────────────────────────────────────────────────
 
-    /** OR auquel ce devis est rattaché */
+    /** OR auquel ce devis est rattaché (une fois le dossier transformé) */
     public function ordreReparation(): BelongsTo
     {
         return $this->belongsTo(OrdreReparation::class, 'or_id');
+    }
+
+    /** Dossier de réception auquel ce devis est rattaché, tant que l'OR n'existe pas encore */
+    public function dossier(): BelongsTo
+    {
+        return $this->belongsTo(DossierReception::class, 'dossier_id');
     }
 
     /** Lignes de détail du devis (pièces, main d'œuvre, forfaits) */
@@ -55,6 +61,26 @@ class Devis extends Model
     public function bonCommande(): HasOne
     {
         return $this->hasOne(BonCommande::class, 'devis_id');
+    }
+
+    /**
+     * Retourne l'OR si le devis y est déjà rattaché, sinon le dossier de
+     * réception. Pratique pour les vues partagées entre les deux flux.
+     */
+    public function getParentAttribute(): OrdreReparation|DossierReception|null
+    {
+        return $this->ordreReparation ?: $this->dossier;
+    }
+
+    /**
+     * Le client ne doit pas pouvoir valider un devis tant que le fournisseur
+     * (stcd-magasin) n'a pas statué sur la disponibilité de chaque pièce —
+     * une pièce dont `disponible` est encore null (aucune réponse reçue) bloque
+     * l'acceptation. Un devis sans pièce (main d'œuvre seule) n'est jamais bloqué.
+     */
+    public function attendReponseFournisseur(): bool
+    {
+        return $this->lignes->where('type', 'piece')->contains(fn (LigneDevis $l) => is_null($l->disponible));
     }
 
     // ── Calculs ────────────────────────────────────────────────────────

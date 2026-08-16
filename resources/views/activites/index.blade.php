@@ -83,7 +83,7 @@
                 <td class="px-5 py-3">
                     <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0
-                            {{ $a->user_role === 'admin' ? 'bg-orange-500' : ($a->user_role === 'chef_garage' ? 'bg-purple-500' : ($a->user_role === 'mecanicien' ? 'bg-blue-500' : ($a->user_role === 'magasinier' ? 'bg-teal-500' : 'bg-green-500'))) }}">
+                            {{ $a->user_role === 'admin' ? 'bg-orange-500' : ($a->user_role === 'chef_garage' ? 'bg-purple-500' : ($a->user_role === 'mecanicien' ? 'bg-blue-500' : 'bg-green-500')) }}">
                             {{ strtoupper(substr($a->user_name, 0, 1)) }}
                         </div>
                         <div>

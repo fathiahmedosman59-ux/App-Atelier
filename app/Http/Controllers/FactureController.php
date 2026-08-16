@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Activite;
 use App\Models\Facture;
 use App\Models\LigneFacture;
+use App\Models\MarqueGarantie;
 use App\Models\OrdreReparation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class FactureController extends Controller
      */
     public function index(\Illuminate\Http\Request $request)
     {
-        $query = Facture::with(['client', 'ordreReparation'])
+        $query = Facture::with(['client', 'marqueGarantie', 'ordreReparation'])
             ->latest('date_emission');
 
         // Filtre par statut de la facture (emise, payee, annulee...)
@@ -120,16 +121,33 @@ class FactureController extends Controller
             'lignes.*.remise.max'          => 'La remise ne peut pas dépasser 100%.',
         ]);
 
-        // Bloquer si le client a un compte crédit mais a dépassé son plafond
-        $client = $ordresReparation->client;
-        if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte()) {
-            $plafond = number_format($client->plafond_compte, 0, ',', ' ');
-            $solde   = number_format($client->solde_compte,   0, ',', ' ');
-            return back()->with('error', "Impossible de créer la facture : le plafond de compte crédit de {$client->nom_complet} est atteint ({$solde} FDJ utilisés sur {$plafond} FDJ autorisés). Veuillez encaisser les factures en attente avant de continuer.");
+        // Panne couverte par la garantie constructeur → la facture est adressée au
+        // compte de la marque (ex: GWM) et non au client, jusqu'à son plafond.
+        $estGarantieApprouvee = $ordresReparation->type === 'garantie' && $ordresReparation->statut_garantie === 'approuve';
+        $marqueGarantie = null;
+
+        if ($estGarantieApprouvee) {
+            $marqueGarantie = MarqueGarantie::pourMarque($ordresReparation->vehicule->marque);
+            if (! $marqueGarantie) {
+                return back()->with('error', "Impossible de créer la facture : aucun compte garantie constructeur n'est configuré pour la marque « {$ordresReparation->vehicule->marque} ». Ajoutez-le dans Réglages atelier → Garantie constructeur avant de facturer.");
+            }
+            if (! $marqueGarantie->peutFacturer()) {
+                $plafond = number_format($marqueGarantie->plafond_credit, 0, ',', ' ');
+                $solde   = number_format($marqueGarantie->solde_utilise,  0, ',', ' ');
+                return back()->with('error', "Impossible de créer la facture : le plafond du compte garantie {$marqueGarantie->nom} est atteint ({$solde} FDJ utilisés sur {$plafond} FDJ autorisés).");
+            }
+        } else {
+            // Bloquer si le client a un compte crédit mais a dépassé son plafond
+            $client = $ordresReparation->client;
+            if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte()) {
+                $plafond = number_format($client->plafond_compte, 0, ',', ' ');
+                $solde   = number_format($client->solde_compte,   0, ',', ' ');
+                return back()->with('error', "Impossible de créer la facture : le plafond de compte crédit de {$client->nom_complet} est atteint ({$solde} FDJ utilisés sur {$plafond} FDJ autorisés). Veuillez encaisser les factures en attente avant de continuer.");
+            }
         }
 
         // Transaction : si une étape échoue, tout est annulé (aucune donnée partielle en base)
-        $facture = DB::transaction(function () use ($request, $ordresReparation) {
+        $facture = DB::transaction(function () use ($request, $ordresReparation, $marqueGarantie) {
             $montantHt = 0;
             $lignes    = [];
 
@@ -154,12 +172,18 @@ class FactureController extends Controller
             $ttc    = $montantHt + $tva;
             $client = $ordresReparation->client;
 
+            // Panne garantie approuvée : le client n'a rien à payer et n'a pas à
+            // attendre le caissier — le crédit sur le compte de la marque est
+            // accordé automatiquement pour permettre la restitution immédiate.
+            $creditAutoGarantie = (bool) $marqueGarantie;
+
             // Création de la facture principale (toujours en statut "émise" — non payée)
             $facture = Facture::create([
                 'numero'             => Facture::genererNumero(),
                 'or_id'              => $ordresReparation->id,
                 'devis_id'           => null,
                 'client_id'          => $ordresReparation->client_id,
+                'marque_garantie_id' => $marqueGarantie?->id,
                 'statut'             => 'emise',
                 'mode_paiement'      => null,
                 'date_emission'      => now(),
@@ -171,10 +195,12 @@ class FactureController extends Controller
                 'montant_ttc'        => $ttc,
                 'montant_paye'       => 0,
                 'date_paiement'      => null,
-                // Le crédit n'est jamais accordé automatiquement — c'est le caissier qui clique "Mettre sur le compte client"
-                'credit_accorde'     => false,
-                'credit_accorde_at'  => null,
-                'credit_accorde_par' => null,
+                // Le crédit n'est jamais accordé automatiquement pour un client — c'est le
+                // caissier qui clique "Mettre sur le compte client". Exception : garantie
+                // constructeur approuvée, cf. commentaire $creditAutoGarantie ci-dessus.
+                'credit_accorde'     => $creditAutoGarantie,
+                'credit_accorde_at'  => $creditAutoGarantie ? now() : null,
+                'credit_accorde_par' => $creditAutoGarantie ? auth()->id() : null,
             ]);
 
             // Création des lignes de détail de la facture
@@ -191,7 +217,7 @@ class FactureController extends Controller
             return $facture;
         });
 
-        Activite::journaliser('creer_facture', "Création facture {$facture->numero} — {$facture->client->nom_complet} — {$facture->montant_ttc} FDJ TTC", $facture);
+        Activite::journaliser('creer_facture', "Création facture {$facture->numero} — {$facture->payeur_nom} — {$facture->montant_ttc} FDJ TTC", $facture);
 
         return redirect()->route('factures.show', $facture)
             ->with('success', "Facture {$facture->numero} créée avec succès.");
@@ -202,7 +228,7 @@ class FactureController extends Controller
      */
     public function show(Facture $facture)
     {
-        $facture->load(['client', 'ordreReparation.vehicule', 'lignes']);
+        $facture->load(['client', 'marqueGarantie', 'ordreReparation.vehicule', 'lignes']);
         return view('factures.show', compact('facture'));
     }
 
@@ -212,7 +238,7 @@ class FactureController extends Controller
      */
     public function imprimer(Facture $facture)
     {
-        $facture->load(['client', 'lignes', 'ordreReparation.vehicule', 'ordreReparation.devis.bonCommande']);
+        $facture->load(['client', 'marqueGarantie', 'lignes', 'ordreReparation.vehicule', 'ordreReparation.devis.bonCommande']);
         return view('factures.print', compact('facture'));
     }
 
@@ -261,13 +287,24 @@ class FactureController extends Controller
     {
         if (! auth()->user()->hasPermission('gerer_compte_credit')) abort(403);
 
-        $client         = $facture->client;
         $montantRestant = $facture->getMontantRestant();
-        if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte($montantRestant)) {
-            $plafond   = number_format($client->plafond_compte, 0, ',', ' ');
-            $solde     = number_format($client->solde_compte,   0, ',', ' ');
-            $montant   = number_format($montantRestant,         0, ',', ' ');
-            return back()->with('error', "Impossible de mettre sur le compte : cette facture ({$montant} FDJ) dépasserait le plafond de {$client->nom_complet} (solde actuel {$solde} FDJ / plafond {$plafond} FDJ).");
+
+        if ($facture->marque_garantie_id) {
+            $marque = $facture->marqueGarantie;
+            if (! $marque->peutFacturer($montantRestant)) {
+                $plafond = number_format($marque->plafond_credit, 0, ',', ' ');
+                $solde   = number_format($marque->solde_utilise,  0, ',', ' ');
+                $montant = number_format($montantRestant,         0, ',', ' ');
+                return back()->with('error', "Impossible de mettre sur le compte : cette facture ({$montant} FDJ) dépasserait le plafond du compte garantie {$marque->nom} (solde actuel {$solde} FDJ / plafond {$plafond} FDJ).");
+            }
+        } else {
+            $client = $facture->client;
+            if ($client->compte_actif && $client->plafond_compte && ! $client->peutFacturerSurCompte($montantRestant)) {
+                $plafond   = number_format($client->plafond_compte, 0, ',', ' ');
+                $solde     = number_format($client->solde_compte,   0, ',', ' ');
+                $montant   = number_format($montantRestant,         0, ',', ' ');
+                return back()->with('error', "Impossible de mettre sur le compte : cette facture ({$montant} FDJ) dépasserait le plafond de {$client->nom_complet} (solde actuel {$solde} FDJ / plafond {$plafond} FDJ).");
+            }
         }
 
         $facture->update([

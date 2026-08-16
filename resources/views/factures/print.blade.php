@@ -8,14 +8,18 @@
         * { margin:0; padding:0; box-sizing:border-box; }
         html, body { width: 210mm; }
         body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; background: #fff; }
-        .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 10mm 14mm 12mm; }
+        .page { width: 210mm; min-height: 297mm; padding: 10mm 14mm 12mm; }
+        @media screen {
+            html, body { width: 100%; background: #d1d5db; }
+            .page { margin: 55px auto 40px; box-shadow: 0 4px 24px rgba(0,0,0,.18); }
+        }
 
         /* ── En-tête ── */
         .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
         .company-logo { height: 56px; width: auto; }
         .company-name { font-size: 11pt; font-weight: 900; text-transform: uppercase; color: #111; margin-top: 4px; }
-        .company-sub  { font-size: 7.5pt; color: #555; font-style: italic; }
-        .company-addr { font-size: 7.5pt; color: #555; margin-top: 2px; }
+        .company-sub  { font-size: 7.5pt; color: #faf1f1; font-style: italic; }
+        .company-addr { font-size: 7.5pt; color: #f7f7f7; margin-top: 2px; }
 
         .doc-meta { text-align: right; }
         .doc-city  { font-size: 9pt; color: #333; margin-bottom: 4px; }
@@ -40,6 +44,8 @@
         th.r, td.r { text-align: right; }
         td { padding: 4px 6px; border: 1px solid #ddd; vertical-align: middle; }
 
+        tr.section-sep-row td { border-left:none!important; border-right:none!important; border-bottom:none!important; border-top:6px solid #fff!important; padding:0; background:#fff; }
+        tr.section-sep-row .sep-inner { display:block; background:#f0f0f0; border-left:4px solid #333; padding:4px 10px; font-size:9.5pt; font-weight:700; letter-spacing:0.5px; }
         .section-hdr { background: #e8e8e8; font-weight: 700; font-size: 8.5pt; padding: 3px 6px; border: 1px solid #ccc; text-transform: uppercase; letter-spacing: 0.5px; }
         .subtotal-row td { background: #f8f8f8; font-weight: 700; border-top: 1.5px solid #999; }
 
@@ -63,15 +69,23 @@
         /* ── Pied ── */
         .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 5px; font-size: 7pt; color: #666; text-align: center; }
 
-        /* ── Bouton ── */
-        .print-btn { position: fixed; top: 16px; right: 16px; background: #111; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
-        .back-btn  { position: fixed; top: 16px; right: 170px; background: #f1f5f9; color: #334155; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; }
-        @media print { .print-btn, .back-btn { display: none; } }
+        /* ── Boutons ── */
+        .btn-bar { position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+                   display: flex; gap: 10px; z-index: 99; }
+        .print-btn { background: #111; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .back-btn  { background: #dc2626; color: #fff; border: none; padding: 10px 22px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; }
+        @media print { .btn-bar { display: none; } }
     </style>
 </head>
 <body>
-<button onclick="window.print()" class="print-btn">Imprimer</button>
-<a href="{{ route('factures.show', $facture) }}" class="back-btn">← Retour</a>
+<div class="btn-bar">
+    @if(request('apercu'))
+    <button onclick="window.close()" class="back-btn">← Fermer</button>
+    @else
+    <a href="{{ route('factures.show', $facture) }}" class="back-btn">← Retour</a>
+    @endif
+    <button onclick="window.print()" class="print-btn">🖨 Imprimer</button>
+</div>
 
 <div class="page">
 
@@ -101,15 +115,15 @@
         <div class="client-left">
             <div class="client-row">
                 <span class="client-lbl">DOIT :</span>
-                <span class="client-val" style="font-weight:700;">{{ $facture->client->nom_complet }}</span>
+                <span class="client-val" style="font-weight:700;">{{ $facture->payeur_nom }}</span>
             </div>
-            @if($facture->client->nif)
+            @if(!$facture->marque_garantie_id && $facture->client->nif)
             <div class="client-row">
                 <span class="client-lbl">CODE NIF :</span>
                 <span class="client-val">{{ $facture->client->nif }}</span>
             </div>
             @endif
-            @if($facture->client->rc)
+            @if(!$facture->marque_garantie_id && $facture->client->rc)
             <div class="client-row">
                 <span class="client-lbl">RC :</span>
                 <span class="client-val">{{ $facture->client->rc }}</span>
@@ -152,31 +166,50 @@
 
     {{-- ── Tableau des prestations ── --}}
     @php
-        $pieces = $facture->lignes->where('type', 'piece');
-        $mo     = $facture->lignes->whereIn('type', ['main_oeuvre', 'forfait', 'autre']);
+        $pieces      = $facture->lignes->where('type', 'piece');
+        $mo          = $facture->lignes->whereIn('type', ['main_oeuvre', 'forfait', 'autre']);
         $totalPieces = $pieces->sum('total_ht');
         $totalMo     = $mo->sum('total_ht');
         $dateFacture = $facture->date_emission->format('d/m/Y');
+
+        /* Remise : visible uniquement si au moins une ligne en a une */
+        $hasRemiseF  = $facture->lignes->where('remise', '>', 0)->isNotEmpty();
+        $totalBrutF  = $facture->lignes->sum(fn($l) => round($l->quantite * $l->prix_unitaire, 2));
+        $totalRemiseF = round($totalBrutF - $facture->montant_ht, 2);
+        $colSpanF    = $hasRemiseF ? 7 : 6;
     @endphp
 
-    <table>
+    @php $nbColsF = $hasRemiseF ? 8 : 7; @endphp
+
+    <table style="table-layout:fixed;">
+        <colgroup>
+            <col style="width:65px;">
+            <col style="width:80px;">
+            <col>
+            <col style="width:38px;">
+            <col style="width:40px;">
+            <col style="width:82px;">
+            @if($hasRemiseF)<col style="width:52px;">@endif
+            <col style="width:84px;">
+        </colgroup>
         <thead>
             <tr>
-                <th style="width:65px;">DATE</th>
-                <th style="width:90px;">REFERENCE</th>
+                <th>DATE</th>
+                <th>REFERENCE</th>
                 <th>DESIGNATION</th>
-                <th class="c" style="width:40px;">QTE</th>
-                <th class="c" style="width:42px;">UNITE</th>
-                <th class="r" style="width:80px;">PRIX UNIT.</th>
-                <th class="r" style="width:85px;">MONTANT</th>
+                <th class="c">QTE</th>
+                <th class="c">UNITE</th>
+                <th class="r">PRIX UNIT.</th>
+                @if($hasRemiseF)<th class="c">REMISE</th>@endif
+                <th class="r">MONTANT</th>
             </tr>
         </thead>
         <tbody>
 
             {{-- Section Pièces détachées --}}
             @if($pieces->count())
-            <tr>
-                <td colspan="7" class="section-hdr">Pièces détachées</td>
+            <tr class="section-sep-row">
+                <td colspan="{{ $nbColsF }}"><span class="sep-inner">Pièces détachées</span></td>
             </tr>
             @foreach($pieces as $l)
             <tr>
@@ -186,19 +219,24 @@
                 <td class="c">{{ number_format($l->quantite, 0) }}</td>
                 <td class="c" style="font-size:8.5pt;">{{ $l->unite ?: 'PCS' }}</td>
                 <td class="r">{{ number_format($l->prix_unitaire, 0, ',', ' ') }}</td>
+                @if($hasRemiseF)
+                <td class="c" @if($l->remise > 0) style="color:#c00;font-weight:700;" @else style="color:#999;" @endif>
+                    {{ $l->remise > 0 ? number_format($l->remise, 0).' %' : '—' }}
+                </td>
+                @endif
                 <td class="r" style="font-weight:700;">{{ number_format($l->total_ht, 0, ',', ' ') }}</td>
             </tr>
             @endforeach
             <tr class="subtotal-row">
-                <td colspan="6" style="text-align:right;padding-right:10px;">Total Pièces détachées</td>
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;white-space:nowrap;">Total Pièces détachées</td>
                 <td class="r">{{ number_format($totalPieces, 0, ',', ' ') }}</td>
             </tr>
             @endif
 
             {{-- Section Main d'Oeuvre --}}
             @if($mo->count())
-            <tr>
-                <td colspan="7" class="section-hdr">Main d'Oeuvre</td>
+            <tr class="section-sep-row">
+                <td colspan="{{ $nbColsF }}"><span class="sep-inner">Main d'Œuvre</span></td>
             </tr>
             @foreach($mo as $l)
             <tr>
@@ -208,6 +246,11 @@
                 <td class="c">{{ $l->quantite > 0 ? number_format($l->quantite, 0) : '' }}</td>
                 <td class="c" style="font-size:8.5pt;">{{ $l->unite ?: ($l->type === 'main_oeuvre' ? 'H' : '') }}</td>
                 <td class="r">{{ $l->prix_unitaire > 0 ? number_format($l->prix_unitaire, 0, ',', ' ') : '' }}</td>
+                @if($hasRemiseF)
+                <td class="c" @if($l->remise > 0) style="color:#c00;font-weight:700;" @else style="color:#999;" @endif>
+                    {{ $l->remise > 0 ? number_format($l->remise, 0).' %' : '—' }}
+                </td>
+                @endif
                 <td class="r" style="font-weight:700;">{{ $l->total_ht > 0 ? number_format($l->total_ht, 0, ',', ' ') : '' }}</td>
             </tr>
             @endforeach
@@ -217,21 +260,56 @@
     </table>
 
     {{-- ── Totaux bas ── --}}
-    <div class="totaux-zone">
-        <div class="totaux-box">
+    {{-- Totaux dans le même tableau pour l'alignement --}}
+    <table style="table-layout:fixed;">
+        <colgroup>
+            <col style="width:65px;">
+            <col style="width:80px;">
+            <col>
+            <col style="width:38px;">
+            <col style="width:40px;">
+            <col style="width:82px;">
+            @if($hasRemiseF)<col style="width:52px;">@endif
+            <col style="width:84px;">
+        </colgroup>
+        <tbody>
+            @if($hasRemiseF)
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;color:#555;white-space:nowrap;">Sous-total HT brut</td>
+                <td class="r">{{ number_format($totalBrutF, 0, ',', ' ') }}</td>
+            </tr>
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;color:#c00;font-weight:700;white-space:nowrap;">Remise totale</td>
+                <td class="r" style="color:#c00;font-weight:700;">- {{ number_format($totalRemiseF, 0, ',', ' ') }}</td>
+            </tr>
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;white-space:nowrap;">Total HT net</td>
+                <td class="r">{{ number_format($facture->montant_ht, 0, ',', ' ') }}</td>
+            </tr>
+            @elseif($facture->taux_tva > 0)
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;white-space:nowrap;">Total HT</td>
+                <td class="r">{{ number_format($facture->montant_ht, 0, ',', ' ') }}</td>
+            </tr>
+            @endif
             @if($facture->taux_tva > 0)
-            <div class="totaux-row"><span>Total HT</span><span>{{ number_format($facture->montant_ht, 0, ',', ' ') }}</span></div>
-            <div class="totaux-row"><span>TVA ({{ $facture->taux_tva }}%)</span><span>{{ number_format($facture->montant_tva, 0, ',', ' ') }}</span></div>
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;white-space:nowrap;">TVA ({{ (int)$facture->taux_tva }} %)</td>
+                <td class="r">{{ number_format($facture->montant_tva, 0, ',', ' ') }}</td>
+            </tr>
             @endif
             @if(($facture->frais_timbre ?? 0) > 0)
-            <div class="totaux-row timbre"><span>FRAIS DE TIMBRE</span><span>{{ number_format($facture->frais_timbre, 0, ',', ' ') }}</span></div>
+            <tr class="subtotal-row">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding-right:10px;font-weight:700;white-space:nowrap;">FRAIS DE TIMBRE</td>
+                <td class="r" style="font-weight:700;">{{ number_format($facture->frais_timbre, 0, ',', ' ') }}</td>
+            </tr>
             @endif
-            <div class="totaux-row total-final">
-                <span>TOTAL</span>
-                <span>{{ number_format($facture->totalGeneral(), 0, ',', ' ') }}</span>
-            </div>
-        </div>
-    </div>
+            <tr style="background:#111;color:#fff;">
+                <td colspan="{{ $nbColsF - 1 }}" class="r" style="padding:6px 10px;font-weight:900;font-size:11pt;white-space:nowrap;">TOTAL</td>
+                <td class="r" style="padding:6px 6px;font-weight:900;font-size:11pt;">{{ number_format($facture->totalGeneral(), 0, ',', ' ') }}</td>
+            </tr>
+        </tbody>
+    </table>
 
     {{-- Montant en lettres --}}
     <div class="montant-lettres">
@@ -260,8 +338,10 @@
 
 </div>
 <script>
+@if(!request('apercu'))
 window.onafterprint = function () { window.close(); };
 window.addEventListener('load', function () { setTimeout(window.print, 400); });
+@endif
 </script>
 </body>
 </html>

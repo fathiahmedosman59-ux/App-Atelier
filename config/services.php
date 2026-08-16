@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'stcd_magasin' => [
+        'url'           => env('STCD_MAGASIN_URL'),
+        'token'         => env('STCD_MAGASIN_TOKEN'),
+        'inbound_token' => env('STCD_MAGASIN_INBOUND_TOKEN'),
+    ],
+
 ];

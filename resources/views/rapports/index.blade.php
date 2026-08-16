@@ -236,7 +236,15 @@
                                      style="width: {{ $tech['total'] > 0 ? round($tech['termines']/$tech['total']*100) : 0 }}%"></div>
                             </div>
                         </div>
-                        <span class="text-xs font-bold text-slate-600 w-12 text-right">{{ $tauxCharge }}% charge</span>
+                        <span class="text-xs font-bold text-slate-600 w-16 text-right" title="Volume d'OR par rapport au technicien le plus chargé">{{ $tauxCharge }}% charge</span>
+                        @php
+                            $perf = $tech['performance_moyenne'];
+                            $perfCouleur = $perf === null ? 'text-slate-400 bg-gray-50' : ($perf >= 100 ? 'text-green-700 bg-green-50' : ($perf >= 80 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50'));
+                        @endphp
+                        <span class="text-xs font-bold px-2 py-1 rounded-lg w-32 text-center flex-shrink-0 {{ $perfCouleur }}"
+                              title="Durée estimée / durée réelle nette (hors pauses) — moyenne sur {{ $tech['nb_mesures'] }} OR pointé(s). 100% = dans les temps.">
+                            {{ $perf === null ? 'Perf. — n/a' : $perf . '% perf. moy.' }}
+                        </span>
                     </div>
                 </div>
             </div>

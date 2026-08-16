@@ -9,9 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Modèle BonCommande.
  *
- * Un bon de commande pièces (BC) est généré automatiquement quand un devis
- * contenant des pièces détachées est accepté par le client.
- * Il permet au magasinier de suivre la commande des pièces auprès des fournisseurs.
+ * Un bon de commande pièces (BC) est généré automatiquement dès la création
+ * d'un devis contenant des pièces détachées (avant même sa validation), puis
+ * transmis en temps réel au système fournisseur (stcd-magasin) qui renvoie
+ * la disponibilité et le prix de vente de chaque pièce. Le BC n'a pas encore
+ * d'OR tant que le devis n'est pas accepté — il reste rattaché à son dossier
+ * de réception (`or_id`/`dossier_id` : un seul des deux est renseigné, comme
+ * pour Devis — cf. vehicule()/client() ci-dessous pour lire l'un ou l'autre
+ * sans s'en soucier).
  *
  * Cycle de vie : en_attente → commande → recu.
  * Chaque ligne du BC peut être cochée individuellement à la réception.
@@ -22,7 +27,11 @@ class BonCommande extends Model
 {
     protected $table = 'bons_commande';
 
-    protected $fillable = ['numero', 'devis_id', 'or_id', 'statut', 'notes'];
+    protected $fillable = ['numero', 'devis_id', 'or_id', 'dossier_id', 'statut', 'notes', 'fournisseur_repondu_at'];
+
+    protected $casts = [
+        'fournisseur_repondu_at' => 'datetime',
+    ];
 
     // ── Relations ──────────────────────────────────────────────────────
 
@@ -32,16 +41,38 @@ class BonCommande extends Model
         return $this->belongsTo(Devis::class);
     }
 
-    /** OR associé à ce bon de commande */
+    /** OR associé à ce bon de commande (null si envoyé avant acceptation du devis) */
     public function ordreReparation(): BelongsTo
     {
         return $this->belongsTo(OrdreReparation::class, 'or_id');
     }
 
-    /** Lignes de pièces à commander */
+    /** Dossier de réception d'origine (avant qu'un OR n'existe) */
+    public function dossier(): BelongsTo
+    {
+        return $this->belongsTo(DossierReception::class, 'dossier_id');
+    }
+
+    /**
+     * Lignes de pièces à commander. Ordre stable (par id de création) — la
+     * position dans cette liste sert de clé de correspondance avec
+     * stcd-magasin (index dans le payload JSON), donc jamais réordonnée.
+     */
     public function lignes(): HasMany
     {
-        return $this->hasMany(LigneBonCommande::class);
+        return $this->hasMany(LigneBonCommande::class)->orderBy('id');
+    }
+
+    /** Véhicule concerné, que le BC soit déjà rattaché à un OR ou encore à un dossier */
+    public function getVehiculeAttribute(): ?Vehicule
+    {
+        return $this->ordreReparation?->vehicule ?? $this->dossier?->vehicule;
+    }
+
+    /** Client concerné, que le BC soit déjà rattaché à un OR ou encore à un dossier */
+    public function getClientAttribute(): ?Client
+    {
+        return $this->ordreReparation?->client ?? $this->dossier?->client;
     }
 
     // ── Numérotation ───────────────────────────────────────────────────
@@ -80,5 +111,16 @@ class BonCommande extends Model
             'recu'       => 'green',
             default      => 'gray',
         };
+    }
+
+    /**
+     * Le fournisseur (stcd-magasin) a-t-il statué sur la disponibilité de
+     * toutes les lignes ? Tant que ce n'est pas le cas, le garage ne doit pas
+     * pouvoir marquer les pièces comme reçues.
+     */
+    public function estValideParFournisseur(): bool
+    {
+        return $this->lignes->isNotEmpty()
+            && $this->lignes->every(fn (LigneBonCommande $ligne) => ! is_null($ligne->disponible));
     }
 }

@@ -44,7 +44,7 @@
                 <td class="px-6 py-4">
                     <div class="flex items-center gap-3">
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0
-                            {{ $utilisateur->role === 'admin' ? 'bg-orange-500' : ($utilisateur->role === 'chef_garage' ? 'bg-purple-500' : ($utilisateur->role === 'mecanicien' ? 'bg-blue-500' : ($utilisateur->role === 'magasinier' ? 'bg-teal-500' : 'bg-green-500'))) }}">
+                            {{ $utilisateur->role === 'admin' ? 'bg-orange-500' : ($utilisateur->role === 'chef_garage' ? 'bg-purple-500' : 'bg-green-500') }}">
                             {{ strtoupper(substr($utilisateur->name, 0, 1)) }}
                         </div>
                         <div>
@@ -60,9 +60,7 @@
                     <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
                         {{ $utilisateur->role === 'admin' ? 'bg-orange-100 text-orange-700'
                             : ($utilisateur->role === 'chef_garage' ? 'bg-purple-100 text-purple-700'
-                            : ($utilisateur->role === 'mecanicien' ? 'bg-blue-100 text-blue-700'
-                            : ($utilisateur->role === 'magasinier' ? 'bg-teal-100 text-teal-700'
-                            : 'bg-green-100 text-green-700'))) }}">
+                            : 'bg-green-100 text-green-700') }}">
                         {{ $utilisateur->getRoleLabel() }}
                     </span>
                 </td>
@@ -159,17 +157,9 @@
                             class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
                         Chef de garage
                     </button>
-                    <button type="button" onclick="setRole('mecanicien')" id="role-mecanicien"
-                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
-                        Mécanicien
-                    </button>
                     <button type="button" onclick="setRole('receptionniste')" id="role-receptionniste"
                             class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
                         Réceptionniste
-                    </button>
-                    <button type="button" onclick="setRole('magasinier')" id="role-magasinier"
-                            class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
-                        Magasinier
                     </button>
                     <button type="button" onclick="setRole('caissier')" id="role-caissier"
                             class="py-2 rounded-xl border text-sm font-semibold transition-colors border-gray-200 text-slate-600">
@@ -242,7 +232,7 @@
         if (old.password !== undefined) {
             ouvrirPassword(null, 'Utilisateur');
         } else if (old.name !== undefined) {
-            ouvrirEdit(null, old.name || '', old.email || '', old.role || 'mecanicien');
+            ouvrirEdit(null, old.name || '', old.email || '', old.role || 'receptionniste');
         }
     });
 </script>
@@ -273,7 +263,7 @@ function fermerEdit() {
 
 function setRole(role) {
     document.getElementById('edit-role').value = role;
-    ['admin','chef_garage','mecanicien','receptionniste','magasinier','caissier','responsable_garantie'].forEach(function(r) {
+    ['admin','chef_garage','receptionniste','caissier','responsable_garantie'].forEach(function(r) {
         var btn = document.getElementById('role-' + r);
         if (r === role) {
             btn.className = 'py-2 rounded-xl border text-sm font-semibold transition-colors border-orange-500 bg-orange-50 text-orange-700';

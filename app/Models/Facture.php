@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Facture extends Model
 {
     protected $fillable = [
-        'numero', 'or_id', 'devis_id', 'client_id', 'encaissement_global_id',
+        'numero', 'or_id', 'devis_id', 'client_id', 'marque_garantie_id', 'encaissement_global_id',
         'statut', 'mode_paiement',
         'date_emission', 'date_echeance', 'date_paiement', 'notes', 'frais_timbre',
         'montant_ht', 'taux_tva', 'montant_tva', 'montant_ttc', 'montant_paye',
@@ -57,10 +57,24 @@ class Facture extends Model
         return $this->belongsTo(Devis::class);
     }
 
-    /** Client facturé */
+    /** Client facturé (le propriétaire du véhicule — reste renseigné même si payeur = marque garantie) */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /** Compte garantie constructeur facturé (renseigné uniquement si la panne était couverte par la garantie) */
+    public function marqueGarantie(): BelongsTo
+    {
+        return $this->belongsTo(MarqueGarantie::class);
+    }
+
+    /** Nom de l'entité qui paie réellement cette facture (marque garantie, sinon le client) */
+    public function getPayeurNomAttribute(): string
+    {
+        return $this->marque_garantie_id
+            ? $this->marqueGarantie->nom . ' (garantie constructeur)'
+            : $this->client->nom_complet;
     }
 
     /** Lignes de détail de la facture (pièces + main d'œuvre) */

@@ -18,7 +18,7 @@
                     <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">Numéro</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">Client</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">Véhicule</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">OR</th>
+                    <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">OR / Dossier</th>
                     <th class="px-5 py-3 text-right text-xs font-semibold text-slate-500">TTC</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold text-slate-500">Statut</th>
                     <th class="px-5 py-3"></th>
@@ -28,12 +28,12 @@
                 @forelse($devis as $d)
                 <tr class="hover:bg-gray-50">
                     <td class="px-5 py-3 font-mono font-semibold text-slate-800">{{ $d->numero }}</td>
-                    <td class="px-5 py-3 text-slate-700">{{ $d->ordreReparation->client->nom_complet }}</td>
-                    <td class="px-5 py-3 text-slate-500 font-mono text-xs">{{ $d->ordreReparation->vehicule->immatriculation }}</td>
+                    <td class="px-5 py-3 text-slate-700">{{ $d->parent->client->nom_complet }}</td>
+                    <td class="px-5 py-3 text-slate-500 font-mono text-xs">{{ $d->parent->vehicule->immatriculation }}</td>
                     <td class="px-5 py-3">
-                        <a href="{{ route('ordres-reparations.show', $d->ordreReparation) }}"
+                        <a href="{{ $d->or_id ? route('ordres-reparations.show', $d->or_id) : route('dossiers-reception.show', $d->dossier_id) }}"
                            class="font-mono text-orange-500 hover:underline text-xs">
-                            {{ $d->ordreReparation->numero }}
+                            {{ $d->parent->numero }}
                         </a>
                     </td>
                     <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ number_format($d->montant_ttc, 0, ',', ' ') }} FDJ</td>

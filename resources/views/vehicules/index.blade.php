@@ -4,7 +4,7 @@
 @section('page-subtitle', $vehicules->total() . ' véhicule(s) enregistré(s)')
 
 @section('header-actions')
-@if(auth()->user()->canManageWorkshop())
+@if(auth()->user()->hasPermission('gerer_vehicules'))
 <a href="{{ route('vehicules.create') }}"
    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -48,7 +48,7 @@
             </svg>
         </div>
         <p class="text-slate-600 font-medium">Aucun véhicule trouvé</p>
-        @if(auth()->user()->canManageWorkshop())
+        @if(auth()->user()->hasPermission('gerer_vehicules'))
         <a href="{{ route('vehicules.create') }}" class="mt-4 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
             Enregistrer un véhicule
         </a>
@@ -89,8 +89,10 @@
                 </td>
                 <td class="px-6 py-4">
                     <div class="flex flex-col gap-1">
-                        @if($v->sous_garantie)
+                        @if($v->estEligibleGarantie())
                             <span class="inline-flex text-xs bg-green-100 text-green-700 font-medium px-2 py-0.5 rounded-full w-fit">Garantie</span>
+                        @elseif($v->sous_garantie)
+                            <span class="inline-flex text-xs bg-gray-100 text-gray-500 font-medium px-2 py-0.5 rounded-full w-fit" title="{{ ucfirst($v->getMotifSortieGarantieLabel() ?? '') }}">Garantie expirée</span>
                         @endif
                         @if($v->isAssuranceExpiree())
                             <span class="inline-flex text-xs bg-red-100 text-red-600 font-medium px-2 py-0.5 rounded-full w-fit">Assurance exp.</span>
@@ -108,7 +110,7 @@
                         <a href="{{ route('vehicules.show', $v) }}" class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Voir">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                         </a>
-                        @if(auth()->user()->canManageWorkshop())
+                        @if(auth()->user()->hasPermission('gerer_vehicules'))
                         <a href="{{ route('vehicules.edit', $v) }}" class="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Modifier">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </a>

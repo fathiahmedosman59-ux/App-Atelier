@@ -1,13 +1,17 @@
 @extends('layouts.app')
 @section('title', $facture->numero)
 @section('page-title', $facture->numero)
-@section('page-subtitle', $facture->client->nom_complet)
+@section('page-subtitle', $facture->payeur_nom)
 
 @section('header-actions')
 <div class="flex gap-2">
     <a href="{{ route('ordres-reparations.show', $facture->ordreReparation) }}"
        class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
         ← OR {{ $facture->ordreReparation->numero }}
+    </a>
+    <a href="{{ route('factures.imprimer', $facture) }}?apercu=1" target="_blank"
+       class="flex items-center gap-2 text-sm border border-gray-300 text-slate-700 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
+        👁 Aperçu
     </a>
     <a href="{{ route('factures.imprimer', $facture) }}" target="_blank"
        class="flex items-center gap-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-3 py-2 transition-colors">
@@ -54,8 +58,13 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             <div>
+                @if($facture->marque_garantie_id)
+                <span class="text-sm font-semibold text-indigo-800">Facturée au compte garantie constructeur {{ $facture->marqueGarantie->nom }}</span>
+                <span class="text-xs text-indigo-600 ml-1">— le client ne paie rien</span>
+                @else
                 <span class="text-sm font-semibold text-indigo-800">Facture sur le compte client</span>
                 <span class="text-xs text-indigo-600 ml-1">— accordé le {{ $facture->credit_accorde_at?->format('d/m/Y à H:i') }}</span>
+                @endif
             </div>
         </div>
         @if(auth()->user()->hasPermission('gerer_compte_credit'))

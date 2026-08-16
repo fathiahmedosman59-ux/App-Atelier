@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', $devis->numero)
 @section('page-title', $devis->numero)
-@section('page-subtitle', $devis->ordreReparation->client->nom_complet . ' — ' . $devis->ordreReparation->vehicule->immatriculation)
+@section('page-subtitle', $devis->parent->client->nom_complet . ' — ' . $devis->parent->vehicule->immatriculation)
 
 @section('header-actions')
 <div class="flex gap-2">
@@ -18,6 +18,10 @@
         </button>
     </form>
     @endif
+    <a href="{{ route('devis.imprimer', $devis) }}?apercu=1" target="_blank"
+       class="flex items-center gap-2 text-sm border border-gray-300 text-slate-700 hover:bg-gray-50 rounded-lg px-3 py-2 transition-colors">
+        👁 Aperçu
+    </a>
     <a href="{{ route('devis.imprimer', $devis) }}" target="_blank"
        class="flex items-center gap-2 text-sm bg-slate-700 hover:bg-slate-800 text-white rounded-lg px-3 py-2 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -25,7 +29,7 @@
         </svg>
         Imprimer
     </a>
-    @if($devis->bonCommande && auth()->user()->peutGererBonsCommande())
+    @if($devis->bonCommande && auth()->user()->peutVoirBonsCommande())
     <a href="{{ route('bons-commande.show', $devis->bonCommande) }}"
        class="flex items-center gap-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-3 py-2 transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -34,10 +38,17 @@
         BC {{ $devis->bonCommande->numero }}
     </a>
     @endif
-    <a href="{{ route('ordres-reparations.show', $devis->ordreReparation) }}"
+    @if($devis->or_id)
+    <a href="{{ route('ordres-reparations.show', $devis->or_id) }}"
        class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
-        ← OR {{ $devis->ordreReparation->numero }}
+        ← OR {{ $devis->parent->numero }}
     </a>
+    @else
+    <a href="{{ route('dossiers-reception.show', $devis->dossier_id) }}"
+       class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
+        ← Dossier {{ $devis->parent->numero }}
+    </a>
+    @endif
 </div>
 @endsection
 
@@ -47,6 +58,12 @@
 @if(session('success'))
 <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">{{ session('success') }}</div>
 @endif
+
+@if(session('error'))
+<div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{{ session('error') }}</div>
+@endif
+
+@php $attendFournisseur = $devis->attendReponseFournisseur(); @endphp
 
 {{-- Statut + workflow --}}
 <div class="bg-white rounded-2xl border-2 border-{{ $devis->getStatutColor() }}-300 p-6">
@@ -58,7 +75,14 @@
             <span class="text-slate-500 text-sm">{{ $devis->numero }}</span>
         </div>
         <div class="flex gap-2">
+            @if(auth()->user()->peutValiderDevis())
             @if($devis->statut === 'brouillon')
+            @if($attendFournisseur)
+            <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                    class="bg-gray-200 text-gray-400 text-sm font-bold px-4 py-2 rounded-xl cursor-not-allowed">
+                📤 Marquer envoyé au client
+            </button>
+            @else
             <form method="POST" action="{{ route('devis.envoyer', $devis) }}">
                 @csrf @method('PATCH')
                 <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors">
@@ -66,7 +90,18 @@
                 </button>
             </form>
             @endif
+            @endif
             @if(in_array($devis->statut, ['brouillon','envoye']))
+            @if($attendFournisseur)
+            <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                    class="bg-gray-200 text-gray-400 text-sm font-bold px-4 py-2 rounded-xl cursor-not-allowed">
+                ✓ Marquer accepté
+            </button>
+            <button type="button" disabled title="En attente de la confirmation du fournisseur pour toutes les pièces"
+                    class="bg-gray-200 text-gray-400 text-sm font-bold px-4 py-2 rounded-xl cursor-not-allowed">
+                ✗ Refusé
+            </button>
+            @else
             <form method="POST" action="{{ route('devis.accepter', $devis) }}">
                 @csrf @method('PATCH')
                 <button type="submit" class="bg-green-500 hover:bg-green-600 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors">
@@ -81,11 +116,25 @@
                 </button>
             </form>
             @endif
+            @endif
+            @endif
         </div>
     </div>
 
-    {{-- Upload devis signé --}}
-    @if(in_array($devis->statut, ['envoye','brouillon']))
+    @if(in_array($devis->statut, ['brouillon','envoye']) && ! auth()->user()->peutValiderDevis())
+    <p class="mt-3 text-xs text-slate-400 bg-gray-50 border border-gray-100 rounded-xl px-4 py-2">
+        En attente de validation par une personne autorisée (chef d'atelier, administrateur, ou droit "Valider les devis").
+    </p>
+    @endif
+
+    @if(in_array($devis->statut, ['brouillon','envoye']) && $attendFournisseur)
+    <p class="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2">
+        ⏳ En attente de la confirmation du fournisseur pour une ou plusieurs pièces — la validation du devis n'est pas possible tant que le magasin n'a pas répondu.
+    </p>
+    @endif
+
+    {{-- Upload devis signé — mêmes droits que la validation (gerer_devis ou valider_devis) --}}
+    @if(in_array($devis->statut, ['envoye','brouillon']) && auth()->user()->peutValiderDevis() && ! $attendFournisseur)
     <div class="mt-4 border-t border-gray-100 pt-4">
         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Uploader le devis signé par le client</p>
         <form method="POST" action="{{ route('devis.upload-signature', $devis) }}" enctype="multipart/form-data" class="flex gap-3 items-center">
@@ -136,7 +185,16 @@
                             {{ $ligne->getTypeLabel() }}
                         </span>
                     </td>
-                    <td class="px-5 py-3 text-slate-700 font-medium">{{ $ligne->designation }}</td>
+                    <td class="px-5 py-3 text-slate-700 font-medium">
+                        {{ $ligne->designation }}
+                        @if($ligne->type === 'piece' && $ligne->disponible === true)
+                        <span class="block text-xs text-green-600 font-normal mt-0.5">✓ Confirmé par le fournisseur</span>
+                        @elseif($ligne->type === 'piece' && $ligne->disponible === false)
+                        <span class="block text-xs text-red-600 font-normal mt-0.5">⚠ Indisponible chez le fournisseur{{ $ligne->note_fournisseur ? ' — ' . $ligne->note_fournisseur : '' }}</span>
+                        @elseif($ligne->type === 'piece' && is_null($ligne->disponible))
+                        <span class="block text-xs text-slate-400 font-normal mt-0.5">En attente de réponse du fournisseur…</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-3 text-slate-500 font-mono text-xs">
                         {{ $ligne->reference ?: '—' }}
                     </td>

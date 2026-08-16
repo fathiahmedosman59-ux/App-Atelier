@@ -96,15 +96,23 @@
                         Voir l'OR
                     </a>
                     @if(auth()->user()->hasPermission('traiter_garanties'))
-                    <form method="POST" action="{{ route('ordres-reparations.garantie', $or) }}" class="flex gap-2">
-                        @csrf @method('PATCH')
-                        <button type="submit" name="statut_garantie" value="approuve"
-                                onclick="return confirm('Approuver la garantie pour cet OR ?')"
-                                class="text-xs bg-green-500 hover:bg-green-600 text-white font-bold px-3 py-1.5 rounded-lg transition-colors">
-                            ✓ Approuver
-                        </button>
-                    </form>
-                    <button onclick="toggleRefus('refus-{{ $or->id }}')"
+                    <button onclick="toggleZone('approuve-{{ $or->id }}')"
+                            class="text-xs bg-green-100 hover:bg-green-200 text-green-700 font-bold px-3 py-1.5 rounded-lg transition-colors text-center">
+                        ✓ Approuver
+                    </button>
+                    <div id="approuve-{{ $or->id }}" class="hidden mt-1">
+                        <form method="POST" action="{{ route('ordres-reparations.garantie', $or) }}" class="space-y-2">
+                            @csrf @method('PATCH')
+                            <input type="hidden" name="statut_garantie" value="approuve">
+                            <textarea name="motif_approbation_garantie" rows="2" required
+                                      placeholder="Motif de l'approbation..."
+                                      class="w-full px-3 py-2 border border-green-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"></textarea>
+                            <button type="submit" class="w-full text-xs bg-green-500 hover:bg-green-600 text-white font-bold py-1.5 rounded-lg transition-colors">
+                                Confirmer l'approbation
+                            </button>
+                        </form>
+                    </div>
+                    <button onclick="toggleZone('refus-{{ $or->id }}')"
                             class="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-bold px-3 py-1.5 rounded-lg transition-colors text-center">
                         ✗ Refuser
                     </button>
@@ -149,6 +157,9 @@
                     <span class="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">✓ Approuvée</span>
                 </div>
                 <p class="text-xs text-slate-500">{{ $or->vehicule->immatriculation }} — {{ $or->client->nom_complet }} — {{ $or->date_entree->format('d/m/Y') }}</p>
+                @if($or->motif_approbation_garantie)
+                <p class="text-xs text-green-600 mt-0.5 italic">{{ $or->motif_approbation_garantie }}</p>
+                @endif
             </div>
             <a href="{{ route('ordres-reparations.show', $or) }}"
                class="text-xs text-orange-500 hover:underline font-medium flex-shrink-0">Voir l'OR</a>
@@ -188,7 +199,7 @@
 </div>
 
 <script>
-function toggleRefus(id) {
+function toggleZone(id) {
     document.getElementById(id).classList.toggle('hidden');
 }
 </script>

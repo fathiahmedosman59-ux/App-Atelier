@@ -27,11 +27,11 @@ class OrdreReparation extends Model
     protected $fillable = [
         // Identification et affectation
         'numero', 'client_id', 'vehicule_id', 'conseiller_id', 'technicien_id',
-        'service', 'date_affectation', 'chef_id',
+        'service', 'service_gratuit', 'date_affectation', 'chef_id',
         // Statut et type
-        'type', 'statut', 'statut_garantie', 'motif_refus_garantie',
+        'type', 'statut', 'statut_garantie', 'motif_refus_garantie', 'motif_approbation_garantie',
         // État du véhicule à l'entrée
-        'kilometrage_entree', 'niveau_carburant', 'proprete_interne', 'proprete_externe',
+        'kilometrage_entree', 'entretien_km_seuil', 'niveau_carburant', 'proprete_interne', 'proprete_externe',
         'etat_exterieur', 'motif_entree', 'accessoires_presents', 'liste_accessoires',
         'equipements', 'dommages_carrosserie', 'signature_client',
         // Dates et planning
@@ -42,8 +42,8 @@ class OrdreReparation extends Model
         // État du véhicule à la sortie (restitution)
         'kilometrage_sortie', 'niveau_carburant_sortie',
         'proprete_interne_sortie', 'proprete_externe_sortie',
-        'equipements_sortie', 'notes_restitution', 'signature_restitution',
-        'restitue_par_id',
+        'equipements_sortie', 'dommages_carrosserie_sortie', 'notes_restitution', 'signature_restitution',
+        'fiche_signee_restitution', 'restitue_par_id',
     ];
 
     protected $casts = [
@@ -55,9 +55,11 @@ class OrdreReparation extends Model
         'heure_fin_travaux'    => 'datetime',
         'accessoires_presents' => 'boolean',
         'signature_client'     => 'boolean',
+        'service_gratuit'      => 'boolean',
         'equipements'          => 'array',   // Stocké en JSON, retourné comme tableau PHP
         'dommages_carrosserie' => 'array',   // Idem — zones de carrosserie endommagées
         'equipements_sortie'   => 'array',   // Équipements vérifiés à la restitution
+        'dommages_carrosserie_sortie' => 'array', // Zones endommagées constatées à la restitution
     ];
 
     // ── Relations ──────────────────────────────────────────────────────
@@ -71,8 +73,8 @@ class OrdreReparation extends Model
     /** Réceptionniste qui a créé l'OR */
     public function conseiller(): BelongsTo { return $this->belongsTo(User::class, 'conseiller_id'); }
 
-    /** Mécanicien affecté aux travaux */
-    public function technicien(): BelongsTo { return $this->belongsTo(User::class, 'technicien_id'); }
+    /** Technicien affecté aux travaux (fiche seule, pas de compte de connexion — cf. Technicien) */
+    public function technicien(): BelongsTo { return $this->belongsTo(Technicien::class, 'technicien_id'); }
 
     /** Chef de garage qui a validé l'affectation */
     public function chef(): BelongsTo       { return $this->belongsTo(User::class, 'chef_id'); }
@@ -98,10 +100,32 @@ class OrdreReparation extends Model
     /** Facture liée à cet OR */
     public function facture(): HasOne       { return $this->hasOne(Facture::class, 'or_id'); }
 
+    /** Dossier de réception dont est issu cet OR (réception → diagnostic → devis) */
+    public function dossier(): HasOne       { return $this->hasOne(DossierReception::class, 'or_id'); }
+
+    /**
+     * Portée : OR prêts à être physiquement restitués au client — soit facturés
+     * avec une facture réglée (payée ou à crédit), soit un service gratuit déjà
+     * au statut "pret" (pas de facture à attendre). Utilisée à la fois pour le
+     * filtre "Prêts à restituer" et le badge de compteur du menu, pour que les
+     * deux restent toujours cohérents entre eux.
+     */
+    public function scopePretsARestituer($query)
+    {
+        return $query->where(function ($q) {
+            $q->where(function ($q2) {
+                $q2->where('statut', 'facture')
+                   ->whereHas('facture', fn ($q3) => $q3->where('statut', 'payee')->orWhere('credit_accorde', true));
+            })->orWhere(function ($q2) {
+                $q2->where('service_gratuit', true)->where('statut', 'pret');
+            });
+        });
+    }
+
     // ── Calculs de temps et performance ────────────────────────────────
 
     /**
-     * Calcule la durée réelle des travaux en heures (à partir des heures de début et fin).
+     * Calcule la durée brute des travaux en heures (temps total écoulé, pauses incluses).
      * Retourne null si l'une des deux heures n'est pas enregistrée.
      */
     public function getDureeReelleHeures(): ?float
@@ -111,15 +135,28 @@ class OrdreReparation extends Model
     }
 
     /**
-     * Calcule le taux de performance du mécanicien en pourcentage.
-     * 100% = durée réelle = durée estimée. >100% = plus rapide que prévu.
+     * Calcule la durée nette des travaux en heures en excluant les pauses configurées.
+     * Si aucune pause n'est configurée, retourne la même valeur que getDureeReelleHeures().
+     */
+    public function getDureeNetteHeures(): ?float
+    {
+        if (!$this->heure_debut_travaux || !$this->heure_fin_travaux) return null;
+        return \App\Services\HoraireService::calculerDureeNette(
+            $this->heure_debut_travaux,
+            $this->heure_fin_travaux
+        );
+    }
+
+    /**
+     * Calcule le taux de performance du mécanicien en pourcentage basé sur la durée nette.
+     * 100% = durée nette = durée estimée. >100% = plus rapide que prévu.
      * Retourne null si les données nécessaires sont manquantes.
      */
     public function getPerformance(): ?int
     {
-        $reel = $this->getDureeReelleHeures();
-        if (!$reel || !$this->duree_estimee) return null;
-        return (int) round($this->duree_estimee / $reel * 100);
+        $nette = $this->getDureeNetteHeures();
+        if (!$nette || !$this->duree_estimee) return null;
+        return (int) round($this->duree_estimee / $nette * 100);
     }
 
     /**

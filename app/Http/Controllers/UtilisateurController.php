@@ -44,7 +44,7 @@ class UtilisateurController extends Controller
         $request->validate([
             'name'  => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($utilisateur->id)],
-            'role'  => ['required', 'in:admin,chef_garage,mecanicien,receptionniste,magasinier'],
+            'role'  => ['required', 'in:admin,chef_garage,receptionniste,caissier,responsable_garantie'],
         ], [
             'name.required'  => 'Le nom de l\'utilisateur est obligatoire.',
             'name.max'       => 'Le nom ne doit pas dépasser 255 caractères.',
@@ -88,7 +88,7 @@ class UtilisateurController extends Controller
      * Règles de sécurité :
      *   - Un utilisateur ne peut pas supprimer son propre compte
      *   - Avant suppression, les références à cet utilisateur dans les OR sont nullifiées
-     *     (conseiller, technicien, chef) pour ne pas laisser de références brisées en base
+     *     (conseiller, chef) pour ne pas laisser de références brisées en base
      */
     public function destroy(User $utilisateur)
     {
@@ -104,7 +104,6 @@ class UtilisateurController extends Controller
         // Transaction : nullification des OR liés + suppression, tout en bloc atomique
         DB::transaction(function () use ($utilisateur) {
             OrdreReparation::where('conseiller_id', $utilisateur->id)->update(['conseiller_id' => null]);
-            OrdreReparation::where('technicien_id', $utilisateur->id)->update(['technicien_id' => null]);
             OrdreReparation::where('chef_id',        $utilisateur->id)->update(['chef_id'        => null]);
             $utilisateur->delete();
         });

@@ -1,17 +1,20 @@
 @extends('layouts.app')
 @section('title', 'Créer un devis')
 @section('page-title', 'Créer un devis')
-@section('page-subtitle', $or->numero . ' — ' . $or->client->nom_complet)
+@section('page-subtitle', $parent->numero . ' — ' . $parent->client->nom_complet)
 
 @section('header-actions')
-<a href="{{ route('ordres-reparations.show', $or) }}" class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
-    ← Retour OR
+<a href="{{ $backHref }}" class="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 border border-gray-300 rounded-lg px-3 py-2 transition-colors">
+    ← Retour
 </a>
 @endsection
 
 @section('content')
-<form method="POST" action="{{ route('devis.store', $or) }}" id="form-devis">
+<form method="POST" action="{{ $formAction }}" id="form-devis">
 @csrf
+
+{{-- Référentiel des opérations de maintenance : suggestion auto de désignation + durée main d'œuvre --}}
+<div id="operations-dropdown" class="hidden fixed z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-y-auto" style="max-height: 280px;"></div>
 
 <div class="max-w-5xl space-y-5">
 
@@ -19,17 +22,17 @@
 <div class="bg-white rounded-2xl border border-gray-200 p-6">
     <div class="grid grid-cols-3 gap-4">
         <div class="bg-orange-50 rounded-xl p-4">
-            <p class="text-xs text-orange-400 mb-1">Ordre de réparation</p>
-            <p class="font-mono font-bold text-slate-900">{{ $or->numero }}</p>
+            <p class="text-xs text-orange-400 mb-1">{{ $parentLabel }}</p>
+            <p class="font-mono font-bold text-slate-900">{{ $parent->numero }}</p>
         </div>
         <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-xs text-slate-400 mb-1">Client</p>
-            <p class="font-semibold text-slate-800 text-sm">{{ $or->client->nom_complet }}</p>
+            <p class="font-semibold text-slate-800 text-sm">{{ $parent->client->nom_complet }}</p>
         </div>
         <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-xs text-slate-400 mb-1">Véhicule</p>
-            <p class="font-mono font-bold text-slate-700">{{ $or->vehicule->immatriculation }}</p>
-            <p class="text-xs text-slate-500">{{ $or->vehicule->designation }}</p>
+            <p class="font-mono font-bold text-slate-700">{{ $parent->vehicule->immatriculation }}</p>
+            <p class="text-xs text-slate-500">{{ $parent->vehicule->designation }}</p>
         </div>
     </div>
 </div>
@@ -94,8 +97,9 @@
                         </select>
                     </td>
                     <td class="px-3 py-3">
-                        <input type="text" name="lignes[0][designation]" value="{{ $or->motif_entree }}"
-                               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500" required>
+                        <input type="text" name="lignes[0][designation]" value="{{ $parent->motif_entree }}" autocomplete="off"
+                               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-designation" required
+                               oninput="operationInputChanged(this)" onfocus="ouvrirAutocompleteOperation(this)">
                     </td>
                     <td class="px-3 py-3">
                         <input type="text" name="lignes[0][reference]" disabled placeholder="—"
@@ -156,7 +160,7 @@
     <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl transition-colors shadow-sm text-sm">
         Enregistrer le devis
     </button>
-    <a href="{{ route('ordres-reparations.show', $or) }}" class="px-6 py-3 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm">
+    <a href="{{ $backHref }}" class="px-6 py-3 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 transition-colors text-sm">
         Annuler
     </a>
 </div>
@@ -166,6 +170,92 @@
 
 <script>
 let ligneIndex = 1;
+
+// Référentiel des opérations de maintenance — cf. config/operations_maintenance.php
+const OPERATIONS_LISTE  = @json($operationsMaintenance);
+const OPERATIONS_DUREES = @json($dureesOperations);
+let inputActifAutocomplete = null;
+
+function operationInputChanged(input) {
+    filtrerAutocompleteOperation(input);
+    suggererDureeOperation(input);
+}
+
+function suggererDureeOperation(input) {
+    const row = input.closest('tr');
+    const type = row.querySelector('select[name$="[type]"]').value;
+    if (type !== 'main_oeuvre') return;
+
+    const duree = OPERATIONS_DUREES[input.value];
+    if (duree === undefined) return;
+
+    const qtyInput = row.querySelector('.ligne-qty');
+    qtyInput.value = duree;
+    calculerLigne(qtyInput);
+}
+
+function ouvrirAutocompleteOperation(input) {
+    inputActifAutocomplete = input;
+    filtrerAutocompleteOperation(input);
+}
+
+function filtrerAutocompleteOperation(input) {
+    inputActifAutocomplete = input;
+    const requete = input.value.trim().toLowerCase();
+    const dropdown = document.getElementById('operations-dropdown');
+
+    const resultats = requete
+        ? OPERATIONS_LISTE.filter(op => op.designation.toLowerCase().includes(requete))
+        : OPERATIONS_LISTE;
+
+    if (resultats.length === 0) {
+        dropdown.innerHTML = `<div class="px-3 py-4 text-sm text-slate-400 text-center">Aucune opération trouvée — la désignation libre reste utilisable.</div>`;
+        dropdown.classList.remove('hidden');
+        positionnerDropdown(input, dropdown);
+        return;
+    }
+
+    // Regroupement par catégorie, avec en-tête collante pour naviguer plus facilement dans les 85 opérations
+    const parCategorie = {};
+    resultats.forEach(op => {
+        (parCategorie[op.categorie] ??= []).push(op);
+    });
+
+    dropdown.innerHTML = Object.entries(parCategorie).map(([categorie, ops]) => `
+        <div class="sticky top-0 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-gray-100">${categorie}</div>
+        ${ops.map(op => `
+        <div class="px-3 py-2 hover:bg-orange-50 cursor-pointer border-b border-gray-100"
+             onmousedown="choisirOperationAutocomplete('${op.designation.replace(/'/g, "\\'")}')">
+            <p class="text-sm font-medium text-slate-800">${op.designation}</p>
+            <p class="text-xs text-slate-400">${op.temps_min}-${op.temps_max} min</p>
+        </div>`).join('')}
+    `).join('');
+
+    dropdown.classList.remove('hidden');
+    positionnerDropdown(input, dropdown);
+}
+
+function positionnerDropdown(input, dropdown) {
+    const rect = input.getBoundingClientRect();
+    dropdown.style.top   = (rect.bottom + 4) + 'px';
+    dropdown.style.left  = rect.left + 'px';
+    dropdown.style.width = Math.max(rect.width, 280) + 'px';
+    dropdown.style.maxHeight = Math.min(360, window.innerHeight - rect.bottom - 16) + 'px';
+}
+
+function choisirOperationAutocomplete(designation) {
+    if (!inputActifAutocomplete) return;
+    inputActifAutocomplete.value = designation;
+    suggererDureeOperation(inputActifAutocomplete);
+    document.getElementById('operations-dropdown').classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('operations-dropdown');
+    if (e.target !== inputActifAutocomplete && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
 
 function ajouterLigne(type) {
     const i = ligneIndex++;
@@ -183,9 +273,10 @@ function ajouterLigne(type) {
             </select>
         </td>
         <td class="px-3 py-3">
-            <input type="text" name="lignes[${i}][designation]"
-                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500"
-                   required placeholder="${isPiece ? 'Ex: Filtre à huile, Courroie...' : 'Description de la prestation...'}">
+            <input type="text" name="lignes[${i}][designation]" autocomplete="off"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-designation"
+                   required placeholder="${isPiece ? 'Ex: Filtre à huile, Courroie...' : 'Description de la prestation...'}"
+                   oninput="operationInputChanged(this)" onfocus="ouvrirAutocompleteOperation(this)">
         </td>
         <td class="px-3 py-3">
             <input type="text" name="lignes[${i}][reference]"
@@ -248,6 +339,9 @@ function typeChanged(select) {
         uniteSpan.textContent  = 'h';
         uniteSpan.className    = 'ligne-unite text-xs font-bold text-blue-500 w-4 text-center';
     }
+
+    const designationInput = row.querySelector('.ligne-designation');
+    if (designationInput) suggererDureeOperation(designationInput);
 }
 
 function supprimerLigne(btn) {

@@ -17,17 +17,30 @@
     {{-- Propriétaire --}}
     <div class="bg-white rounded-2xl border border-gray-200 p-6">
         <h3 class="font-semibold text-slate-800 mb-4">Propriétaire</h3>
+        @if($vehicule)
+        {{-- En modification : le propriétaire ne se change plus ici (véhicule vendu à
+             quelqu'un d'autre = évènement à part, avec confirmation et trace — cf. bouton
+             "Changer de propriétaire" sur la fiche véhicule). L'historique reste toujours
+             attaché au véhicule, pas au client. --}}
+        <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+            <div>
+                <p class="text-sm font-medium text-slate-800">{{ $vehicule->client->nom_complet }}</p>
+                <p class="text-xs text-slate-400 mt-0.5">Pour changer de propriétaire (véhicule vendu), utilisez le bouton dédié sur la fiche véhicule.</p>
+            </div>
+        </div>
+        @else
         <div>
             <label class="block text-sm font-medium text-slate-700 mb-1.5">Client <span class="text-red-500">*</span></label>
             <select name="client_id" class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('client_id') border-red-400 @enderror">
                 <option value="">— Sélectionner un client —</option>
                 @foreach($clients as $c)
-                    <option value="{{ $c->id }}" {{ old('client_id', $vehicule?->client_id ?? $clientSelectionne?->id) == $c->id ? 'selected' : '' }}>
+                    <option value="{{ $c->id }}" {{ old('client_id', $clientSelectionne?->id) == $c->id ? 'selected' : '' }}>
                         {{ $c->nom_complet }} — {{ $c->telephone }}
                     </option>
                 @endforeach
             </select>
         </div>
+        @endif
     </div>
 
     {{-- Identification --}}
@@ -86,6 +99,15 @@
                 </select>
             </div>
             <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1.5">Catégorie</label>
+                <select name="categorie" class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white">
+                    @foreach(['' => 'Autre / non précisé', 'pick-up' => 'Pick-up', 'suv' => 'SUV'] as $val => $label)
+                        <option value="{{ $val }}" {{ old('categorie', $vehicule?->categorie ?? '') === $val ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <p class="text-xs text-slate-400 mt-1">Détermine la limite d'âge pour l'éligibilité garantie (pick-up : 3 ans, SUV : 5 ans).</p>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">Couleur</label>
                 <input type="text" name="couleur" value="{{ old('couleur', $vehicule?->couleur) }}"
                        placeholder="Blanc, Noir, Gris..."
@@ -131,7 +153,16 @@
                 <input type="date" name="date_expiration_vignette" value="{{ old('date_expiration_vignette', $vehicule?->date_expiration_vignette?->format('Y-m-d')) }}"
                        class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
             </div>
+            @php $garantieVerrouillee = $vehicule && ! $vehicule->sous_garantie; @endphp
             <div class="col-span-2">
+                @if($garantieVerrouillee)
+                <input type="hidden" name="sous_garantie" value="0">
+                <div class="flex items-center gap-3 opacity-60">
+                    <input type="checkbox" disabled class="w-4 h-4 text-orange-500 border-gray-300 rounded">
+                    <span class="text-sm font-medium text-slate-700">Véhicule sous garantie constructeur</span>
+                </div>
+                <p class="text-xs text-red-500 mt-1">Ce véhicule a été enregistré sans garantie constructeur — ce choix est définitif et ne peut plus être réactivé.</p>
+                @else
                 <label class="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" name="sous_garantie" value="1"
                            {{ old('sous_garantie', $vehicule?->sous_garantie) ? 'checked' : '' }}
@@ -139,7 +170,16 @@
                            onchange="document.getElementById('fin_garantie_block').classList.toggle('hidden', !this.checked)">
                     <span class="text-sm font-medium text-slate-700">Véhicule sous garantie constructeur</span>
                 </label>
+                @if($vehicule)
+                <p class="text-xs text-slate-400 mt-1">Attention : si vous décochez et enregistrez, ce choix sera définitif.</p>
+                @endif
+                @endif
             </div>
+            @if($vehicule?->garantie_sortie_le)
+            <div class="col-span-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <p class="text-sm text-red-700 font-medium">Ce véhicule a été marqué définitivement sorti de la garantie le {{ $vehicule->garantie_sortie_le->format('d/m/Y') }}.</p>
+            </div>
+            @endif
             <div id="fin_garantie_block" class="{{ old('sous_garantie', $vehicule?->sous_garantie) ? '' : 'hidden' }} col-span-2 grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1.5">Fin de garantie</label>

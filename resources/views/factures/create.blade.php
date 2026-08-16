@@ -9,16 +9,34 @@
 </a>
 @endsection
 
+@php
+    $estGarantieApprouvee = $or->type === 'garantie' && $or->statut_garantie === 'approuve';
+    $marqueGarantie = $estGarantieApprouvee ? \App\Models\MarqueGarantie::pourMarque($or->vehicule->marque) : null;
+@endphp
+
 @section('content')
 <form method="POST" action="{{ route('factures.store', $or) }}" id="form-facture">
 @csrf
 <div class="max-w-5xl space-y-5">
 
+@if($estGarantieApprouvee)
+<div class="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-sm text-indigo-800">
+    @if($marqueGarantie)
+    Panne couverte par la garantie constructeur — cette facture sera automatiquement adressée au compte
+    <strong>{{ $marqueGarantie->nom }}</strong> ({{ number_format($marqueGarantie->disponible, 0, ',', ' ') }} FDJ disponibles),
+    pas au client.
+    @else
+    <strong>⚠ Attention :</strong> panne couverte par la garantie constructeur, mais aucun compte garantie n'est configuré pour la marque « {{ $or->vehicule->marque }} ».
+    <a href="{{ route('parametres.index') }}?onglet=garantie" class="underline font-medium">Ajoutez-le dans Réglages atelier</a> avant de créer cette facture.
+    @endif
+</div>
+@endif
+
 {{-- Client + paiement --}}
 <div class="bg-white rounded-2xl border border-gray-200 p-6">
     <div class="grid grid-cols-2 gap-6">
         <div>
-            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Client facturé</h3>
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $estGarantieApprouvee ? 'Propriétaire du véhicule' : 'Client facturé' }}</h3>
             <div class="bg-gray-50 rounded-xl p-4">
                 <p class="font-bold text-slate-900">{{ $or->client->nom_complet }}</p>
                 <p class="text-sm text-slate-500">{{ $or->client->telephone }}</p>
@@ -27,7 +45,7 @@
             </div>
         </div>
         <div class="space-y-3">
-            @if($or->client->compte_actif)
+            @if(!$estGarantieApprouvee && $or->client->compte_actif)
                 @if($or->client->plafond_compte && !$or->client->peutFacturerSurCompte())
                 <div class="bg-red-50 border border-red-300 rounded-xl p-3 flex items-center gap-2">
                     <svg class="w-4 h-4 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">

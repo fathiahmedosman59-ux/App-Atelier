@@ -10,7 +10,7 @@
 @endsection
 
 @section('content')
-<form method="POST" action="{{ route('ordres-reparations.store') }}" id="fiche-reception" enctype="multipart/form-data">
+<form method="POST" action="{{ route('ordres-reparations.store') }}" id="fiche-reception" enctype="multipart/form-data" onsubmit="return validerPhotosReception()">
 @csrf
 
 @if($errors->any())
@@ -78,7 +78,7 @@
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">Nom / Raison sociale <span class="text-red-500">*</span></label>
                 <div class="flex gap-2">
                     <select name="client_id" id="client_id"
-                            class="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('client_id') border-red-400 @enderror"
+                            class="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('client_id') border-red-400 @enderror"
                             onchange="chargerInfoClient(this.value)">
                         <option value="">— Sélectionner —</option>
                         @foreach($clients as $c)
@@ -127,9 +127,9 @@
                 <label class="block text-sm font-medium text-slate-700 mb-1.5">Sélectionner le véhicule <span class="text-red-500">*</span></label>
                 <div class="flex gap-2">
                     <select name="vehicule_id" id="vehicule_id"
-                            class="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('vehicule_id') border-red-400 @enderror"
+                            class="flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('vehicule_id') border-red-400 @enderror"
                             onchange="chargerInfoVehicule(this)">
-                        <option value="">— D'abord sélectionner un client —</option>
+                        <option value="">{{ $clientSelectionne ? ($clientSelectionne->vehicules->isEmpty() ? '— Aucun véhicule — cliquez "+ Nouveau" —' : '— Sélectionner un véhicule —') : '— D\'abord sélectionner un client —' }}</option>
                         @if($clientSelectionne)
                             @foreach($clientSelectionne->vehicules as $v)
                                 <option value="{{ $v->id }}"
@@ -138,7 +138,9 @@
                                         data-modele="{{ $v->modele }}"
                                         data-vin="{{ $v->vin }}"
                                         data-km="{{ $v->kilometrage }}"
-                                        data-garantie="{{ $v->sous_garantie ? '1' : '0' }}"
+                                        data-garantie="{{ $v->estEligibleGarantie() ? '1' : '0' }}"
+                                        data-garantie-sortie="{{ $v->garantie_sortie_le ? '1' : '0' }}"
+                                        data-type-moteur-id="{{ $v->type_moteur_id }}"
                                         {{ old('vehicule_id', $vehiculeSelectionne?->id) == $v->id ? 'selected' : '' }}>
                                     {{ $v->immatriculation }} — {{ $v->marque }} {{ $v->modele }}
                                 </option>
@@ -176,7 +178,10 @@
                 </div>
             </div>
             <div id="garantie_badge" class="hidden bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                <p class="text-sm text-green-700 font-medium">✓ Véhicule sous garantie constructeur</p>
+                <p class="text-sm text-green-700 font-medium">✓ Véhicule éligible à la garantie constructeur</p>
+            </div>
+            <div id="garantie_sortie_badge" class="hidden bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                <p class="text-sm text-red-700 font-medium">✗ Ce véhicule a été signalé définitivement sorti de la garantie</p>
             </div>
         </div>
     </div>
@@ -190,9 +195,9 @@
         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Motif de la visite / Réclamation du client</h3>
     </div>
     <div class="p-6 space-y-4">
-        <input type="hidden" name="type" id="type_value" value="{{ old('type', 'normal') }}">
+        <input type="hidden" name="type" id="type_value" value="{{ old('type', request('type', 'normal')) }}">
         <div class="grid grid-cols-4 gap-3">
-            @php $selectedType = old('type', 'normal'); @endphp
+            @php $selectedType = old('type', request('type', 'normal')); @endphp
             @foreach(['normal' => 'Normal', 'garantie' => 'Garantie', 'sinistre' => 'Sinistre', 'entretien' => 'Entretien périodique'] as $val => $label)
             <button type="button" onclick="selectType('{{ $val }}')" data-type="{{ $val }}"
                     class="type-btn border-2 rounded-xl px-3 py-2.5 text-center text-sm font-medium transition-all
@@ -201,6 +206,22 @@
             </button>
             @endforeach
         </div>
+
+        <div id="bloc_type_moteur" class="{{ $selectedType === 'entretien' ? '' : 'hidden' }}">
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Type de moteur <span class="text-red-500">*</span></label>
+            <select name="type_moteur_id" id="type_moteur_id"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white @error('type_moteur_id') border-red-400 @enderror">
+                <option value="">— Sélectionner le type de moteur —</option>
+                @foreach(\App\Models\TypeMoteur::orderBy('modele')->get() as $tm)
+                <option value="{{ $tm->id }}"
+                        data-marque="{{ $tm->marque }}"
+                        data-modele="{{ $tm->modele }}"
+                        {{ old('type_moteur_id') == $tm->id ? 'selected' : '' }}>{{ $tm->modele }} — moteur {{ $tm->code }}</option>
+                @endforeach
+            </select>
+            <p id="type_moteur_note" class="text-xs text-slate-400 mt-1">Le système déterminera automatiquement les pièces à remplacer et les points à contrôler selon le barème constructeur et le kilométrage.</p>
+        </div>
+
         <div>
             <textarea name="motif_entree" rows="4"
                       placeholder="Décrivez précisément le motif de la visite et/ou la réclamation du client..."
@@ -445,13 +466,12 @@
 ═══════════════════════════════════════════════════════ --}}
 <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
     <div class="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Photos du véhicule à la réception</h3>
-        <span class="text-xs text-slate-400">Optionnel — max 10 photos, 8 Mo chacune</span>
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Photos du véhicule à la réception <span class="text-red-500">*</span></h3>
+        <span class="text-xs text-slate-400">Obligatoire — max 10 photos, 8 Mo chacune</span>
     </div>
     <div class="p-6">
         <div id="photo-drop-zone"
-             class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors"
-             onclick="document.getElementById('photos_vehicule_input').click()"
+             class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center transition-colors"
              ondragover="event.preventDefault(); this.classList.add('border-orange-400','bg-orange-50')"
              ondragleave="this.classList.remove('border-orange-400','bg-orange-50')"
              ondrop="handlePhotoDrop(event)">
@@ -459,10 +479,29 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"/>
             </svg>
-            <p class="text-sm font-medium text-slate-600 mb-1">Cliquer ou glisser-déposer des photos</p>
-            <p class="text-xs text-slate-400">JPG, PNG, WEBP — jusqu'à 10 photos</p>
+            <p class="text-sm font-medium text-slate-600 mb-1">Glisser-déposer des photos, ou :</p>
+            <div class="flex items-center justify-center gap-3 mt-3">
+                <button type="button" onclick="document.getElementById('photos_vehicule_input').click()"
+                        class="inline-flex items-center gap-2 bg-white border border-gray-300 hover:border-orange-400 text-slate-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                    </svg>
+                    Importer des photos
+                </button>
+                <button type="button" onclick="ouvrirCapturePhoto('photo_camera_input', afficherApercusPhotos)"
+                        class="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"/>
+                    </svg>
+                    Prendre une photo
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-3">JPG, PNG, WEBP — jusqu'à 10 photos</p>
             <input type="file" id="photos_vehicule_input" name="photos_vehicule[]" multiple
                    accept="image/jpeg,image/png,image/webp" class="hidden"
+                   onchange="afficherApercusPhotos(this.files)">
+            <input type="file" id="photo_camera_input" accept="image/*" capture="environment" class="hidden"
                    onchange="afficherApercusPhotos(this.files)">
         </div>
 
@@ -687,6 +726,24 @@
                             <option value="autre">Autre</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Catégorie</label>
+                        <select id="mv_categorie"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <option value="">Autre / non précisé</option>
+                            <option value="pick-up">Pick-up</option>
+                            <option value="suv">SUV</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Sous garantie constructeur ? <span class="text-red-500">*</span></label>
+                        <select id="mv_sous_garantie"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <option value="0">Non</option>
+                            <option value="1">Oui</option>
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Choix définitif — si "Non", ce véhicule ne pourra jamais être affecté à l'équipe garantie.</p>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-slate-600 mb-1">VIN / N° Châssis</label>
@@ -700,6 +757,36 @@
                     Créer le véhicule
                 </button>
                 <button type="button" onclick="fermerModalVehicule()"
+                        class="px-5 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 text-sm transition-colors">
+                    Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ══ MODAL : Capture webcam (PC — sur mobile/tablette, l'appareil photo natif s'ouvre directement) ══ --}}
+<div id="modal_webcam" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/70" onclick="fermerWebcam()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h3 class="text-base font-bold text-slate-800">Prendre une photo</h3>
+                <button type="button" onclick="fermerWebcam()" class="text-slate-400 hover:text-slate-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="p-4">
+                <div id="webcam_error" class="hidden bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 mb-3"></div>
+                <video id="webcam_video" autoplay playsinline class="w-full rounded-xl bg-black"></video>
+                <canvas id="webcam_canvas" class="hidden"></canvas>
+            </div>
+            <div class="px-6 pb-5 flex gap-3">
+                <button type="button" onclick="capturerPhotoWebcam()"
+                        class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+                    📷 Capturer
+                </button>
+                <button type="button" onclick="fermerWebcam()"
                         class="px-5 border border-gray-300 text-slate-600 font-medium rounded-xl hover:bg-gray-50 text-sm transition-colors">
                     Annuler
                 </button>
@@ -722,6 +809,7 @@ function chargerInfoClient(clientId) {
     sel.innerHTML = '<option value="">Chargement...</option>';
     ['v_immat','v_marque','v_modele','v_vin'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('garantie_badge').classList.add('hidden');
+    document.getElementById('garantie_sortie_badge').classList.add('hidden');
 
     const btnV = document.getElementById('btn_nouveau_vehicule');
     if (!clientId) {
@@ -743,7 +831,9 @@ function chargerInfoClient(clientId) {
                 o.dataset.modele  = v.modele;
                 o.dataset.vin     = v.vin || '';
                 o.dataset.km      = v.kilometrage || 0;
-                o.dataset.garantie= v.sous_garantie ? '1' : '0';
+                o.dataset.garantie = v.eligible_garantie ? '1' : '0';
+                o.dataset.garantieSortie = v.garantie_sortie ? '1' : '0';
+                o.dataset.typeMoteurId = v.type_moteur_id || '';
                 o.textContent = `${v.immatriculation} — ${v.marque} ${v.modele}`;
                 sel.appendChild(o);
             });
@@ -767,6 +857,55 @@ function chargerInfoVehicule(sel) {
     const badge = document.getElementById('garantie_badge');
     if (opt?.dataset.garantie === '1') badge.classList.remove('hidden');
     else badge.classList.add('hidden');
+    const badgeSortie = document.getElementById('garantie_sortie_badge');
+    if (opt?.dataset.garantieSortie === '1') badgeSortie.classList.remove('hidden');
+    else badgeSortie.classList.add('hidden');
+
+    filtrerTypeMoteur(opt?.dataset.typeMoteurId || '');
+}
+
+// ── Filtre la liste des types de moteur selon la marque/modèle du véhicule reçu ──
+// Comparaison souple (contient / est contenu) car marque et modèle sont du texte libre.
+function filtrerTypeMoteur(typeMoteurIdMemorise) {
+    const vSel = document.getElementById('vehicule_id');
+    const vOpt = vSel?.options[vSel.selectedIndex];
+    const marqueVehicule = (vOpt?.dataset.marque || '').toLowerCase().trim();
+    const modeleVehicule = (vOpt?.dataset.modele || '').toLowerCase().trim();
+
+    const moteurSel = document.getElementById('type_moteur_id');
+    if (!moteurSel) return;
+    const options = Array.from(moteurSel.options).filter(o => o.value !== '');
+
+    let nbVisibles = 0;
+    options.forEach(o => {
+        const modeleType = (o.dataset.modele || '').toLowerCase().trim();
+        const correspond = modeleVehicule && modeleType && (
+            modeleVehicule.includes(modeleType) || modeleType.includes(modeleVehicule)
+        );
+        o.hidden = modeleVehicule !== '' && !correspond;
+        if (!o.hidden) nbVisibles++;
+    });
+
+    const note = document.getElementById('type_moteur_note');
+    if (modeleVehicule !== '' && nbVisibles === 0) {
+        // Aucune correspondance : on ne perd rien, on réaffiche tout pour choisir à la main
+        options.forEach(o => o.hidden = false);
+        if (note) note.textContent = "Aucun barème catalogué ne correspond automatiquement à ce modèle — sélectionnez manuellement, ou faites ajouter le barème du constructeur pour ce modèle.";
+        if (note) note.classList.add('text-amber-500');
+    } else if (note) {
+        note.textContent = 'Le système déterminera automatiquement les pièces à remplacer et les points à contrôler selon le barème constructeur et le kilométrage.';
+        note.classList.remove('text-amber-500');
+    }
+
+    // Pré-remplit le type de moteur déjà mémorisé sur ce véhicule (modifiable),
+    // sinon sélectionne automatiquement s'il n'y a qu'une seule correspondance.
+    if (typeMoteurIdMemorise) {
+        moteurSel.value = typeMoteurIdMemorise;
+    } else if (nbVisibles === 1) {
+        moteurSel.value = options.find(o => !o.hidden).value;
+    } else {
+        moteurSel.value = '';
+    }
 }
 
 // ── Sélection type visite ──────────────────────────────
@@ -780,6 +919,14 @@ function selectType(val) {
         btn.classList.toggle('border-gray-200',   !active);
         btn.classList.toggle('text-slate-600',    !active);
     });
+
+    const blocMoteur = document.getElementById('bloc_type_moteur');
+    if (blocMoteur) blocMoteur.classList.toggle('hidden', val !== 'entretien');
+    if (val === 'entretien') {
+        const vSel = document.getElementById('vehicule_id');
+        const vOpt = vSel?.options[vSel.selectedIndex];
+        filtrerTypeMoteur(vOpt?.dataset.typeMoteurId || '');
+    }
 }
 
 // ── Sélection urgence ──────────────────────────────────
@@ -959,6 +1106,8 @@ async function sauvegarderVehicule() {
         modele:          document.getElementById('mv_modele').value.trim(),
         annee:           document.getElementById('mv_annee').value || null,
         motorisation:    document.getElementById('mv_motorisation').value,
+        categorie:       document.getElementById('mv_categorie').value || null,
+        sous_garantie:   document.getElementById('mv_sous_garantie').value,
         vin:             document.getElementById('mv_vin').value.trim() || null,
         kilometrage:     document.getElementById('mv_km').value || 0,
     };
@@ -988,7 +1137,8 @@ async function sauvegarderVehicule() {
         opt.dataset.modele   = data.modele;
         opt.dataset.vin      = data.vin || '';
         opt.dataset.km       = data.kilometrage || 0;
-        opt.dataset.garantie = '0';
+        opt.dataset.garantie = data.sous_garantie === '1' ? '1' : '0';
+        opt.dataset.garantieSortie = '0';
         opt.textContent = `${data.immatriculation} — ${data.marque} ${data.modele}`;
         sel.appendChild(opt);
         sel.value = data.id;
@@ -998,6 +1148,8 @@ async function sauvegarderVehicule() {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+        document.getElementById('mv_categorie').value = '';
+        document.getElementById('mv_sous_garantie').value = '0';
     } catch(e) {
         errBox.textContent = 'Erreur réseau. Réessayez.';
         errBox.classList.remove('hidden');
@@ -1014,6 +1166,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Photos véhicule ─────────────────────────────────────
 let photosSelectionnees = new DataTransfer();
+
+function validerPhotosReception() {
+    if (photosSelectionnees.files.length === 0) {
+        alert('Au moins une photo du véhicule est obligatoire à la réception.');
+        document.getElementById('photo-drop-zone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+    }
+    return true;
+}
+
+// ── Capture photo : appareil photo natif sur mobile/tablette (écran tactile),
+//    webcam en direct sur PC (pas de "capture" natif via un simple input file) ──
+let webcamStream = null;
+let webcamCallback = null;
+
+function ouvrirCapturePhoto(inputCameraId, callbackAjout) {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+        document.getElementById(inputCameraId).click();
+        return;
+    }
+    webcamCallback = callbackAjout;
+    const errBox = document.getElementById('webcam_error');
+    errBox.classList.add('hidden');
+    document.getElementById('modal_webcam').classList.remove('hidden');
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            webcamStream = stream;
+            document.getElementById('webcam_video').srcObject = stream;
+        })
+        .catch(() => {
+            errBox.textContent = 'Impossible d\'accéder à la caméra — vérifiez les autorisations du navigateur, ou utilisez "Importer des photos".';
+            errBox.classList.remove('hidden');
+        });
+}
+
+function fermerWebcam() {
+    document.getElementById('modal_webcam').classList.add('hidden');
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop());
+        webcamStream = null;
+    }
+}
+
+function capturerPhotoWebcam() {
+    const video = document.getElementById('webcam_video');
+    if (!video.videoWidth) return;
+    const canvas = document.getElementById('webcam_canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        if (webcamCallback) webcamCallback(dt.files);
+        fermerWebcam();
+    }, 'image/jpeg', 0.9);
+}
 
 function afficherApercusPhotos(files) {
     for (const file of files) {
