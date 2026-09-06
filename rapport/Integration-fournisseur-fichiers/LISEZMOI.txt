@@ -1,0 +1,101 @@
+INTEGRATION APP-ATELIER <-> STCD-MAGASIN
+Fichiers a integrer cote stcd-magasin (voir aussi le document
+"Checklist-deploiement-integration-fournisseur.docx" pour le detail complet :
+migrations a executer, variables d'environnement, jetons a generer, URLs
+de production).
+
+Mise a jour : ce paquet reflete l'etat complet et teste du prototype local,
+incluant l'envoi du bon de commande des la creation du devis (pas seulement
+a sa validation), le retour du prix de vente et d'une note explicative par
+ligne, et la preservation des identifications deja faites par un vendeur
+quand le garage modifie un devis deja envoye.
+
+------------------------------------------------------------
+DOSSIER "fichiers_nouveaux"
+------------------------------------------------------------
+Ce sont des fichiers qui n'existent pas encore dans votre projet.
+Sans danger : copiez-les directement aux memes emplacements
+(meme structure de dossiers que dans le zip, a partir de la racine
+du projet stcd-magasin).
+
+------------------------------------------------------------
+DOSSIER "fichiers_modifies_reference"
+------------------------------------------------------------
+ATTENTION : ce sont des fichiers qui EXISTENT DEJA dans votre projet
+(User.php, config/app.php, config/auth.php, config/services.php,
+sidebar.blade.php, routes/api.php, routes/web.php).
+
+NE PAS ECRASER vos fichiers actuels avec ceux-ci directement -
+votre version en production a peut-etre d'autres changements que
+nous n'avons pas ici. Ce sont des fichiers de REFERENCE montrant
+a quoi ils ressemblent une fois les changements integres.
+
+Utilisez plutot le fichier "fichiers_modifies_reference_DIFF.txt"
+(a la racine du zip) : il montre precisement les lignes ajoutees
+(marquees +) et supprimees (marquees -) sur chaque fichier concerne.
+Un developpeur peut appliquer ce diff avec :
+
+    git apply fichiers_modifies_reference_DIFF.txt
+
+...ou integrer les changements a la main en s'aidant du diff comme
+guide.
+
+------------------------------------------------------------
+RESUME DES CHANGEMENTS PAR FICHIER MODIFIE
+------------------------------------------------------------
+- app/Models/User.php : ajout du trait Sanctum HasApiTokens
+- config/app.php : fuseau horaire regle sur Africa/Djibouti
+- config/auth.php : ajout du guard 'sanctum' (necessaire pour
+  l'authentification par jeton de l'API)
+- config/services.php : ajout de la configuration app_atelier
+  (url / token)
+- resources/views/sections/sidebar.blade.php : nouveau lien de
+  menu "Commandes garage (app-atelier)" avec badge de notification
+- routes/api.php : nouvelle route POST /api/bons-commande
+- routes/web.php : nouvelles routes fournisseur-commandes.*
+
+------------------------------------------------------------
+RESUME DES FICHIERS NOUVEAUX (par groupe)
+------------------------------------------------------------
+Modeles :
+- app/Models/ExternalBonCommande.php
+- app/Models/ExternalBonCommandeLigne.php
+
+Controleurs :
+- app/Http/Controllers/Api/FournisseurBonCommandeController.php
+  (recoit les bons de commande du garage - endpoint API - et
+  preserve desormais une ligne deja identifiee par un vendeur si
+  le garage renvoie le meme bon de commande apres une modification
+  de devis : seules la quantite demandee et la disponibilite
+  recalculee sur le stock actuel changent, le produit choisi et son
+  prix restent)
+- app/Http/Controllers/FournisseurCommandeController.php (ecran de
+  consultation/traitement pour le vendeur - inclut desormais un
+  champ "note" optionnel par ligne, rempli uniquement si aucune
+  piece n'est identifiee)
+
+Service :
+- app/Services/AppAtelierApiService.php (renvoie la disponibilite,
+  le prix de vente et la note vers app-atelier apres identification
+  manuelle d'une piece)
+
+Vues :
+- resources/views/fournisseur-commandes/index.blade.php (liste des
+  commandes recues, avec recherche et filtre)
+- resources/views/fournisseur-commandes/show.blade.php (detail
+  d'une commande, identification des pieces avec prix de vente
+  affiche, note optionnelle, pieces en rupture de stock visibles
+  et marquees "INDISPONIBLE" dans la liste de recherche, creation
+  de vente)
+
+Migrations (a executer dans l'ordre, php artisan migrate) :
+- create_external_bons_commande_table
+- create_external_bon_commande_lignes_table
+- make_reference_nullable_on_external_bon_commande_lignes
+- add_position_to_external_bon_commande_lignes
+- add_vente_id_to_external_bons_commande
+- add_vu_at_to_external_bons_commande
+- add_prix_unitaire_note_to_external_bon_commande_lignes (nouveau :
+  prix de vente et note transmis dans la reponse a app-atelier)
+- add_vehicule_vin_to_external_bons_commande (nouveau : numero de
+  chassis du vehicule, transmis a titre informatif)

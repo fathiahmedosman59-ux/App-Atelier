@@ -149,10 +149,6 @@
                 <span class="client-lbl">Type de service :</span>
                 <span class="client-val">{{ $or->getServiceLabel() }}</span>
             </div>
-            <div class="client-row">
-                <span class="client-lbl">Propriétaire :</span>
-                <span class="client-val">{{ $facture->client->nom_complet }}</span>
-            </div>
             @if($facture->date_echeance)
             <div class="client-row">
                 <span class="client-lbl">Échéance :</span>

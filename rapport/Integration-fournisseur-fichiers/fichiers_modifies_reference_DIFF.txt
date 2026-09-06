@@ -1,0 +1,181 @@
+diff --git a/app/Models/User.php b/app/Models/User.php
+index 288fa6c..94885f9 100644
+--- a/app/Models/User.php
++++ b/app/Models/User.php
+@@ -5,10 +5,11 @@
+ use Illuminate\Database\Eloquent\Factories\HasFactory;
+ use Illuminate\Foundation\Auth\User as Authenticatable;
+ use Illuminate\Notifications\Notifiable;
++use Laravel\Sanctum\HasApiTokens;
+ 
+ class User extends Authenticatable
+ {
+-    use HasFactory, Notifiable;
++    use HasApiTokens, HasFactory, Notifiable;
+ 
+     protected $fillable = [
+ 
+diff --git a/config/app.php b/config/app.php
+index e4a91c5..ffcf358 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -70,7 +70,7 @@
+     |
+     */
+ 
+-  'timezone' => 'UTC',
++  'timezone' => 'Africa/Djibouti',
+ 
+   /*
+     |--------------------------------------------------------------------------
+diff --git a/config/auth.php b/config/auth.php
+index 9548c15..f2d0259 100644
+--- a/config/auth.php
++++ b/config/auth.php
+@@ -40,6 +40,11 @@
+             'driver' => 'session',
+             'provider' => 'users',
+         ],
++
++        'sanctum' => [
++            'driver' => 'sanctum',
++            'provider' => 'users',
++        ],
+     ],
+ 
+     /*
+diff --git a/config/services.php b/config/services.php
+index 0ace530..fcab650 100644
+--- a/config/services.php
++++ b/config/services.php
+@@ -31,4 +31,9 @@
+         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+     ],
+ 
++    'app_atelier' => [
++        'url'   => env('APP_ATELIER_URL'),
++        'token' => env('APP_ATELIER_TOKEN'),
++    ],
++
+ ];
+diff --git a/resources/views/sections/sidebar.blade.php b/resources/views/sections/sidebar.blade.php
+index 81e6171..9b72f76 100644
+--- a/resources/views/sections/sidebar.blade.php
++++ b/resources/views/sections/sidebar.blade.php
+@@ -1,5 +1,8 @@
+ @php
+     $user = auth()->user();
++    $nouvellesCommandesGarage = $user && in_array($user->role, ['admin', 'chef_magasinier', 'vendeur'])
++        ? \App\Models\ExternalBonCommande::whereNull('vu_at')->count()
++        : 0;
+ @endphp
+ 
+ <aside id="layout-menu"
+@@ -447,6 +450,37 @@ class="menu-link">
+ 
+         </li>
+ 
++        {{-- COMMANDES REÇUES DU GARAGE (APP-ATELIER) --}}
++        @if($user && in_array($user->role, [
++            'admin',
++            'chef_magasinier',
++            'vendeur'
++        ]))
++
++        <li class="menu-item
++            {{
++                request()->routeIs('fournisseur-commandes.*')
++                ? 'active'
++                : ''
++            }}">
++
++            <a href="{{ route('fournisseur-commandes.index') }}"
++               class="menu-link">
++
++                <i class="menu-icon tf-icons bx bx-transfer-alt"></i>
++
++                <div>Commandes garage (app-atelier)</div>
++
++                @if($nouvellesCommandesGarage > 0)
++                    <div class="badge bg-danger rounded-pill ms-auto">{{ $nouvellesCommandesGarage }}</div>
++                @endif
++
++            </a>
++
++        </li>
++
++        @endif
++
+         {{-- ===================================================== --}}
+         {{-- TRANSACTIONS --}}
+         {{-- ===================================================== --}}
+diff --git a/routes/api.php b/routes/api.php
+index 889937e..676a6fc 100644
+--- a/routes/api.php
++++ b/routes/api.php
+@@ -1,5 +1,6 @@
+ <?php
+ 
++use App\Http\Controllers\Api\FournisseurBonCommandeController;
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Facades\Route;
+ 
+@@ -17,3 +18,6 @@
+ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+     return $request->user();
+ });
++
++// Reçoit les bons de commande envoyés en temps réel par app-atelier.
++Route::middleware('auth:sanctum')->post('/bons-commande', [FournisseurBonCommandeController::class, 'store']);
+diff --git a/routes/web.php b/routes/web.php
+index 77b2055..6edf5fe 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -22,6 +22,7 @@
+ use App\Http\Controllers\DepotTransferController;
+ use App\Http\Controllers\VehicleHistoryController;
+ use App\Http\Controllers\VehicleController;
++use App\Http\Controllers\FournisseurCommandeController;
+ 
+ //use Illuminate\Http\Request;
+ //use Illuminate\Support\Facades\Auth;
+@@ -952,6 +953,39 @@
+     )->name('stock-movements.destroy');
+ 
+ });
++/*
++|--------------------------------------------------------------------------
++| COMMANDES REÇUES DU GARAGE (APP-ATELIER)
++|--------------------------------------------------------------------------
++*/
++
++Route::middleware([
++    'auth',
++    'role:admin,chef_magasinier,vendeur'
++])->group(function () {
++
++    Route::get(
++        '/fournisseur-commandes',
++        [FournisseurCommandeController::class, 'index']
++    )->name('fournisseur-commandes.index');
++
++    Route::get(
++        '/fournisseur-commandes/{fournisseurCommande}',
++        [FournisseurCommandeController::class, 'show']
++    )->name('fournisseur-commandes.show');
++
++    Route::put(
++        '/fournisseur-commandes/{fournisseurCommande}/lignes/{ligne}',
++        [FournisseurCommandeController::class, 'updateLigne']
++    )->name('fournisseur-commandes.lignes.update');
++
++    Route::post(
++        '/fournisseur-commandes/{fournisseurCommande}/creer-vente',
++        [FournisseurCommandeController::class, 'creerVente']
++    )->name('fournisseur-commandes.creer-vente');
++
++});
++
+ /*
+ |--------------------------------------------------------------------------
+ | VÉHICULES
