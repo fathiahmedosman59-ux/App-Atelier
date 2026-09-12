@@ -1,0 +1,106 @@
+CORRECTIONS APP-ATELIER — SEPTEMBRE 2026
+========================================
+
+Lot de 7 corrections. Cette fois-ci, appliquees et VERIFIEES directement sur
+la base de Reyeh10/App-Atelier (branche main, commit 0b6273d "Add production
+Vite build") — PAS sur l'ancienne base (fathiahmedosman59-ux/App-Atelier).
+C'est la cause du probleme d'incompatibilite rencontre precedemment : les
+deux depots avaient diverge (voir "CAUSE DE L'INCOMPATIBILITE" plus bas).
+
+Document detaille : GUIDE-corrections.md (meme dossier).
+
+------------------------------------------------------------
+ETAT ACTUEL — RIEN N'A ETE POUSSE SUR AUCUN GIT
+------------------------------------------------------------
+Les corrections ont ete commitees LOCALEMENT sur une branche dediee :
+
+  Depot local de travail : app-atelier-corrections-reyeh10/
+  Branche                : corrections-2026-09
+  Part de                : Reyeh10/App-Atelier @ main (0b6273d)
+  Commit                 : "Corrections septembre 2026 (VIN, date,
+                            permission devis, prix pieces, profil)"
+
+Cette branche n'a ete poussee NULLE PART (ni vers Reyeh10/App-Atelier,
+ni vers l'ancien depot). Elle attend :
+  1) votre feu vert, ET
+  2) l'adresse du depot git de destination (vous avez indique que ce
+     ne sera pas Reyeh10/App-Atelier — vous la communiquerez).
+
+------------------------------------------------------------
+CAUSE DE L'INCOMPATIBILITE RENCONTREE
+------------------------------------------------------------
+Le depot fathiahmedosman59-ux/App-Atelier (utilise pour le 1er paquet de
+corrections) et Reyeh10/App-Atelier ont diverge a partir d'un ancetre
+commun (commit 9f96044). Le code metier (controleurs, vues) est reste
+identique des deux cotes ; seuls des fichiers de build front (.gitignore,
+package-lock.json, public/build/*) different. Le vrai souci n'etait donc
+pas un conflit de code, mais probablement : coller les fichiers "modifies"
+sans les fichiers "nouveaux" (ProfilController.php notamment), et/ou ne
+pas avoir lance "php artisan migrate" — cause tres probable de l'erreur
+"code incompatible".
+
+Ce nouveau paquet est reconstruit et verifie directement contre
+Reyeh10/App-Atelier pour eliminer toute ambiguite de base.
+
+------------------------------------------------------------
+CONTENU DU DOSSIER — COMMENT L'UTILISER
+------------------------------------------------------------
+
+1) fichiers_nouveaux/            -> CODE COMPLET (fichiers inexistants
+   avant). A copier tels quels.
+     - app/Http/Controllers/ProfilController.php
+     - database/migrations/2026_09_07_202606_add_locale_to_users_table.php
+     - resources/views/profil/edit.blade.php
+
+2) fichiers_modifies_reference/  -> CODE COMPLET de la version corrigee
+   des 12 fichiers existants. A copier tels quels (ecrase l'ancien).
+     - app/Http/Controllers/VehiculeController.php
+     - app/Http/Controllers/DevisController.php
+     - app/Models/User.php
+     - routes/web.php
+     - resources/views/vehicules/_form.blade.php
+     - resources/views/dossiers-reception/create.blade.php
+     - resources/views/ordres-reparations/create.blade.php
+     - resources/views/ordres-reparations/show.blade.php
+     - resources/views/devis/create.blade.php
+     - resources/views/devis/edit.blade.php
+     - resources/views/layouts/app.blade.php
+     - resources/views/auth/login.blade.php
+
+3) fichiers_modifies_DIFF.txt    -> uniquement les lignes changees,
+   calculees entre Reyeh10/App-Atelier@main et la branche corrections-2026-09.
+   git apply fichiers_modifies_DIFF.txt  (si vous preferez un report manuel)
+
+------------------------------------------------------------
+LES 7 CORRECTIONS (rappel)
+------------------------------------------------------------
+1. VIN obligatoire, 17 caracteres alphanumeriques exacts (creation +
+   modification, reception et menu Vehicule).
+2. Date de mise en circulation obligatoire, pas dans le futur (meme
+   portee que le VIN).
+3. Bouton "Creer un devis" dans l'OR corrige pour suivre la permission
+   gerer_devis (au lieu du role admin/chef de garage uniquement).
+4. Prix unitaire des pieces retire de la saisie garage (fourni par le
+   magasin) ; champ verrouille dans le devis.
+5. Nouvel espace "Mon profil" : mot de passe self-service + choix de
+   langue FR/EN/AR (enregistre, interface pas encore traduite).
+6. Cloche de notifications : pastille coupee / fleches parasites, corrige.
+7. Page de connexion : chevauchement du pied de page sur fenetre courte,
+   corrige.
+
+------------------------------------------------------------
+DEPLOIEMENT, UNE FOIS LES FICHIERS EN PLACE
+------------------------------------------------------------
+  php artisan migrate          (colonne users.locale — corr. 5)
+  npm run build                (+ committer public/build/* : Reyeh10/
+                                 App-Atelier le suit dans git)
+  php artisan view:clear
+  php artisan route:clear
+  php artisan config:clear
+
+------------------------------------------------------------
+PROCHAINE ETAPE
+------------------------------------------------------------
+Des que vous donnez le feu vert ET l'URL du depot de destination,
+la branche "corrections-2026-09" (deja prete et commitee localement)
+peut y etre poussee directement — aucune reconstruction necessaire.

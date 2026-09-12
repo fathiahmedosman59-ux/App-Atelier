@@ -1,0 +1,663 @@
+diff --git a/app/Http/Controllers/DevisController.php b/app/Http/Controllers/DevisController.php
+index cecdd77..9178862 100644
+--- a/app/Http/Controllers/DevisController.php
++++ b/app/Http/Controllers/DevisController.php
+@@ -87,7 +87,11 @@ public function store(Request $request, OrdreReparation $ordresReparation)
+             'lignes.*.designation'   => ['required', 'string'],
+             'lignes.*.reference'     => ['nullable', 'string', 'max:100'],
+             'lignes.*.quantite'      => ['required', 'numeric', 'min:0.01'],
+-            'lignes.*.prix_unitaire' => ['required', 'numeric', 'min:0'],
++            // Le prix unitaire des pièces n'est jamais saisi au garage : il est
++            // fourni par le magasin (stcd-magasin) en réponse au bon de commande.
++            // On l'accepte donc facultatif ici (0 par défaut le temps que le
++            // magasin réponde) — cf. LigneBonCommande::propagerVersDevis().
++            'lignes.*.prix_unitaire' => ['nullable', 'numeric', 'min:0'],
+             'lignes.*.remise'        => ['nullable', 'numeric', 'min:0', 'max:100'],
+         ], [
+             'taux_tva.required'            => 'Le taux de TVA est obligatoire.',
+@@ -101,7 +105,6 @@ public function store(Request $request, OrdreReparation $ordresReparation)
+             'lignes.*.designation.required'=> 'La désignation est obligatoire pour chaque ligne.',
+             'lignes.*.quantite.required'   => 'La quantité est obligatoire pour chaque ligne.',
+             'lignes.*.quantite.min'        => 'La quantité doit être supérieure à zéro.',
+-            'lignes.*.prix_unitaire.required' => 'Le prix unitaire est obligatoire pour chaque ligne.',
+             'lignes.*.prix_unitaire.min'   => 'Le prix unitaire ne peut pas être négatif.',
+             'lignes.*.remise.min'          => 'La remise ne peut pas être négative.',
+             'lignes.*.remise.max'          => 'La remise ne peut pas dépasser 100%.',
+@@ -117,17 +120,20 @@ public function store(Request $request, OrdreReparation $ordresReparation)
+                 'statut'   => 'brouillon',
+             ]);
+ 
+-            // Création de chaque ligne de devis avec calcul du total HT
++            // Création de chaque ligne de devis avec calcul du total HT.
++            // Le prix unitaire des pièces vient du magasin (0 tant qu'il n'a pas
++            // répondu) — jamais saisi au garage.
+             foreach ($request->lignes as $ligne) {
+                 $remise  = $ligne['remise'] ?? 0;
+-                $totalHt = round($ligne['quantite'] * $ligne['prix_unitaire'] * (1 - $remise / 100), 2);
++                $prixUnitaire = (float) ($ligne['prix_unitaire'] ?? 0);
++                $totalHt = round($ligne['quantite'] * $prixUnitaire * (1 - $remise / 100), 2);
+                 LigneDevis::create([
+                     'devis_id'      => $devis->id,
+                     'type'          => $ligne['type'],
+                     'designation'   => $ligne['designation'],
+                     'reference'     => ($ligne['type'] === 'piece') ? ($ligne['reference'] ?? null) : null,
+                     'quantite'      => $ligne['quantite'],
+-                    'prix_unitaire' => $ligne['prix_unitaire'],
++                    'prix_unitaire' => $prixUnitaire,
+                     'remise'        => $remise,
+                     'total_ht'      => $totalHt,
+                 ]);
+@@ -166,7 +172,8 @@ public function storePourDossier(Request $request, DossierReception $dossier)
+             'lignes.*.designation'   => ['required', 'string'],
+             'lignes.*.reference'     => ['nullable', 'string', 'max:100'],
+             'lignes.*.quantite'      => ['required', 'numeric', 'min:0.01'],
+-            'lignes.*.prix_unitaire' => ['required', 'numeric', 'min:0'],
++            // Prix unitaire des pièces fourni par le magasin — facultatif ici.
++            'lignes.*.prix_unitaire' => ['nullable', 'numeric', 'min:0'],
+             'lignes.*.remise'        => ['nullable', 'numeric', 'min:0', 'max:100'],
+         ], [
+             'taux_tva.required'            => 'Le taux de TVA est obligatoire.',
+@@ -180,7 +187,6 @@ public function storePourDossier(Request $request, DossierReception $dossier)
+             'lignes.*.designation.required'=> 'La désignation est obligatoire pour chaque ligne.',
+             'lignes.*.quantite.required'   => 'La quantité est obligatoire pour chaque ligne.',
+             'lignes.*.quantite.min'        => 'La quantité doit être supérieure à zéro.',
+-            'lignes.*.prix_unitaire.required' => 'Le prix unitaire est obligatoire pour chaque ligne.',
+             'lignes.*.prix_unitaire.min'   => 'Le prix unitaire ne peut pas être négatif.',
+             'lignes.*.remise.min'          => 'La remise ne peut pas être négative.',
+             'lignes.*.remise.max'          => 'La remise ne peut pas dépasser 100%.',
+@@ -197,14 +203,15 @@ public function storePourDossier(Request $request, DossierReception $dossier)
+ 
+             foreach ($request->lignes as $ligne) {
+                 $remise  = $ligne['remise'] ?? 0;
+-                $totalHt = round($ligne['quantite'] * $ligne['prix_unitaire'] * (1 - $remise / 100), 2);
++                $prixUnitaire = (float) ($ligne['prix_unitaire'] ?? 0);
++                $totalHt = round($ligne['quantite'] * $prixUnitaire * (1 - $remise / 100), 2);
+                 LigneDevis::create([
+                     'devis_id'      => $devis->id,
+                     'type'          => $ligne['type'],
+                     'designation'   => $ligne['designation'],
+                     'reference'     => ($ligne['type'] === 'piece') ? ($ligne['reference'] ?? null) : null,
+                     'quantite'      => $ligne['quantite'],
+-                    'prix_unitaire' => $ligne['prix_unitaire'],
++                    'prix_unitaire' => $prixUnitaire,
+                     'remise'        => $remise,
+                     'total_ht'      => $totalHt,
+                 ]);
+@@ -255,7 +262,9 @@ public function update(Request $request, Devis $devis)
+             'lignes.*.designation'   => ['required', 'string'],
+             'lignes.*.reference'     => ['nullable', 'string', 'max:100'],
+             'lignes.*.quantite'      => ['required', 'numeric', 'min:0.01'],
+-            'lignes.*.prix_unitaire' => ['required', 'numeric', 'min:0'],
++            // Prix unitaire des pièces fourni par le magasin — facultatif ici
++            // (la ligne renvoie le prix déjà propagé s'il existe, 0 sinon).
++            'lignes.*.prix_unitaire' => ['nullable', 'numeric', 'min:0'],
+             'lignes.*.remise'        => ['nullable', 'numeric', 'min:0', 'max:100'],
+         ]);
+ 
+@@ -269,14 +278,15 @@ public function update(Request $request, Devis $devis)
+ 
+             foreach ($request->lignes as $ligne) {
+                 $remise  = $ligne['remise'] ?? 0;
+-                $totalHt = round($ligne['quantite'] * $ligne['prix_unitaire'] * (1 - $remise / 100), 2);
++                $prixUnitaire = (float) ($ligne['prix_unitaire'] ?? 0);
++                $totalHt = round($ligne['quantite'] * $prixUnitaire * (1 - $remise / 100), 2);
+                 LigneDevis::create([
+                     'devis_id'      => $devis->id,
+                     'type'          => $ligne['type'],
+                     'designation'   => $ligne['designation'],
+                     'reference'     => ($ligne['type'] === 'piece') ? ($ligne['reference'] ?? null) : null,
+                     'quantite'      => $ligne['quantite'],
+-                    'prix_unitaire' => $ligne['prix_unitaire'],
++                    'prix_unitaire' => $prixUnitaire,
+                     'remise'        => $remise,
+                     'total_ht'      => $totalHt,
+                 ]);
+diff --git a/app/Http/Controllers/VehiculeController.php b/app/Http/Controllers/VehiculeController.php
+index 1a220b6..e77cba3 100644
+--- a/app/Http/Controllers/VehiculeController.php
++++ b/app/Http/Controllers/VehiculeController.php
+@@ -72,10 +72,14 @@ public function store(Request $request)
+     {
+         if (! auth()->user()->hasPermission('gerer_vehicules')) abort(403);
+ 
++        // Le VIN est saisi indifféremment en minuscules/majuscules : on normalise
++        // avant validation pour que la règle de format et l'unicité soient fiables.
++        $request->merge(['vin' => strtoupper(trim((string) $request->input('vin')))]);
++
+         $data = $request->validate([
+             'client_id'                  => ['required', 'exists:clients,id'],
+             'immatriculation'            => ['required', 'string', 'max:20', 'unique:vehicules'],
+-            'vin'                        => ['nullable', 'string', 'max:50', 'unique:vehicules'],
++            'vin'                        => ['required', 'string', 'size:17', 'regex:/^[A-Z0-9]{17}$/', 'unique:vehicules'],
+             'marque'                     => ['required', 'string', 'max:50'],
+             'modele'                     => ['required', 'string', 'max:100'],
+             'version'                    => ['nullable', 'string', 'max:100'],
+@@ -86,7 +90,7 @@ public function store(Request $request)
+             'cylindree'                  => ['nullable', 'string', 'max:20'],
+             'puissance_fiscale'          => ['nullable', 'string', 'max:10'],
+             'kilometrage'                => ['required', 'integer', 'min:0'],
+-            'date_mise_circulation'      => ['nullable', 'date'],
++            'date_mise_circulation'      => ['required', 'date', 'before_or_equal:today'],
+             'date_expiration_assurance'  => ['nullable', 'date'],
+             'date_expiration_vignette'   => ['nullable', 'date'],
+             'sous_garantie'              => ['boolean'],
+@@ -99,6 +103,9 @@ public function store(Request $request)
+             'immatriculation.required'   => 'Le numéro d\'immatriculation est obligatoire.',
+             'immatriculation.unique'     => 'Ce numéro d\'immatriculation existe déjà dans le système.',
+             'immatriculation.max'        => 'Le numéro d\'immatriculation ne doit pas dépasser 20 caractères.',
++            'vin.required'               => 'Le numéro de châssis (VIN) est obligatoire.',
++            'vin.size'                   => 'Le numéro de châssis (VIN) doit comporter exactement 17 caractères.',
++            'vin.regex'                  => 'Le numéro de châssis (VIN) doit contenir exactement 17 caractères alphanumériques (lettres et chiffres uniquement).',
+             'vin.unique'                 => 'Ce numéro de châssis (VIN) existe déjà dans le système.',
+             'marque.required'            => 'La marque du véhicule est obligatoire.',
+             'modele.required'            => 'Le modèle du véhicule est obligatoire.',
+@@ -110,7 +117,9 @@ public function store(Request $request)
+             'kilometrage.min'            => 'Le kilométrage ne peut pas être négatif.',
+             'annee.min'                  => 'L\'année doit être supérieure à 1960.',
+             'annee.max'                  => 'L\'année ne peut pas dépasser l\'année en cours.',
++            'date_mise_circulation.required' => 'La date de mise en circulation est obligatoire.',
+             'date_mise_circulation.date' => 'La date de mise en circulation n\'est pas valide.',
++            'date_mise_circulation.before_or_equal' => 'La date de mise en circulation ne peut pas être dans le futur.',
+             'date_expiration_assurance.date' => 'La date d\'expiration de l\'assurance n\'est pas valide.',
+             'date_expiration_vignette.date'  => 'La date d\'expiration de la vignette n\'est pas valide.',
+             'fin_garantie.date'          => 'La date de fin de garantie n\'est pas valide.',
+@@ -161,11 +170,15 @@ public function edit(Vehicule $vehicule)
+     public function update(Request $request, Vehicule $vehicule)
+     {
+         if (! auth()->user()->hasPermission('gerer_vehicules')) abort(403);
++
++        // Normalise le VIN (majuscules, sans espaces) avant validation.
++        $request->merge(['vin' => strtoupper(trim((string) $request->input('vin')))]);
++
+         $data = $request->validate([
+             // Le propriétaire ne se change plus ici — cf. transfererProprietaire().
+             // ignore véhicule actuel pour la règle d'unicité
+             'immatriculation'            => ['required', 'string', 'max:20', 'unique:vehicules,immatriculation,' . $vehicule->id],
+-            'vin'                        => ['nullable', 'string', 'max:50', 'unique:vehicules,vin,' . $vehicule->id],
++            'vin'                        => ['required', 'string', 'size:17', 'regex:/^[A-Z0-9]{17}$/', 'unique:vehicules,vin,' . $vehicule->id],
+             'marque'                     => ['required', 'string', 'max:50'],
+             'modele'                     => ['required', 'string', 'max:100'],
+             'version'                    => ['nullable', 'string', 'max:100'],
+@@ -176,7 +189,7 @@ public function update(Request $request, Vehicule $vehicule)
+             'cylindree'                  => ['nullable', 'string', 'max:20'],
+             'puissance_fiscale'          => ['nullable', 'string', 'max:10'],
+             'kilometrage'                => ['required', 'integer', 'min:0'],
+-            'date_mise_circulation'      => ['nullable', 'date'],
++            'date_mise_circulation'      => ['required', 'date', 'before_or_equal:today'],
+             'date_expiration_assurance'  => ['nullable', 'date'],
+             'date_expiration_vignette'   => ['nullable', 'date'],
+             'sous_garantie'              => ['boolean'],
+@@ -187,6 +200,9 @@ public function update(Request $request, Vehicule $vehicule)
+             'immatriculation.required'   => 'Le numéro d\'immatriculation est obligatoire.',
+             'immatriculation.unique'     => 'Ce numéro d\'immatriculation existe déjà dans le système.',
+             'immatriculation.max'        => 'Le numéro d\'immatriculation ne doit pas dépasser 20 caractères.',
++            'vin.required'               => 'Le numéro de châssis (VIN) est obligatoire.',
++            'vin.size'                   => 'Le numéro de châssis (VIN) doit comporter exactement 17 caractères.',
++            'vin.regex'                  => 'Le numéro de châssis (VIN) doit contenir exactement 17 caractères alphanumériques (lettres et chiffres uniquement).',
+             'vin.unique'                 => 'Ce numéro de châssis (VIN) existe déjà dans le système.',
+             'marque.required'            => 'La marque du véhicule est obligatoire.',
+             'modele.required'            => 'Le modèle du véhicule est obligatoire.',
+@@ -198,7 +214,9 @@ public function update(Request $request, Vehicule $vehicule)
+             'kilometrage.min'            => 'Le kilométrage ne peut pas être négatif.',
+             'annee.min'                  => 'L\'année doit être supérieure à 1960.',
+             'annee.max'                  => 'L\'année ne peut pas dépasser l\'année en cours.',
++            'date_mise_circulation.required' => 'La date de mise en circulation est obligatoire.',
+             'date_mise_circulation.date' => 'La date de mise en circulation n\'est pas valide.',
++            'date_mise_circulation.before_or_equal' => 'La date de mise en circulation ne peut pas être dans le futur.',
+             'date_expiration_assurance.date' => 'La date d\'expiration de l\'assurance n\'est pas valide.',
+             'date_expiration_vignette.date'  => 'La date d\'expiration de la vignette n\'est pas valide.',
+             'fin_garantie.date'          => 'La date de fin de garantie n\'est pas valide.',
+@@ -262,6 +280,9 @@ public function storeRapide(Request $request)
+     {
+         if (! auth()->user()->hasPermission('gerer_vehicules')) abort(403);
+ 
++        // Normalise le VIN (majuscules, sans espaces) avant validation.
++        $request->merge(['vin' => strtoupper(trim((string) $request->input('vin')))]);
++
+         $data = $request->validate([
+             'client_id'      => ['required', 'exists:clients,id'],
+             'immatriculation'=> ['required', 'string', 'max:20', 'unique:vehicules'],
+@@ -271,7 +292,8 @@ public function storeRapide(Request $request)
+             'motorisation'   => ['required', 'in:essence,diesel,hybride,electrique,gpl,autre'],
+             'categorie'      => ['nullable', 'in:pick-up,suv'],
+             'sous_garantie'  => ['required', 'boolean'],
+-            'vin'            => ['nullable', 'string', 'max:50', 'unique:vehicules'],
++            'vin'            => ['required', 'string', 'size:17', 'regex:/^[A-Z0-9]{17}$/', 'unique:vehicules'],
++            'date_mise_circulation' => ['required', 'date', 'before_or_equal:today'],
+             'kilometrage'    => ['nullable', 'integer', 'min:0'],
+         ], [
+             'client_id.required'       => 'Veuillez sélectionner un client.',
+@@ -284,7 +306,13 @@ public function storeRapide(Request $request)
+             'motorisation.in'          => 'Le type de motorisation sélectionné est invalide.',
+             'categorie.in'             => 'La catégorie sélectionnée est invalide.',
+             'sous_garantie.required'   => 'Veuillez indiquer si le véhicule est sous garantie constructeur.',
++            'vin.required'             => 'Le numéro de châssis (VIN) est obligatoire.',
++            'vin.size'                 => 'Le numéro de châssis (VIN) doit comporter exactement 17 caractères.',
++            'vin.regex'                => 'Le numéro de châssis (VIN) doit contenir exactement 17 caractères alphanumériques (lettres et chiffres uniquement).',
+             'vin.unique'               => 'Ce numéro de châssis (VIN) existe déjà dans le système.',
++            'date_mise_circulation.required'      => 'La date de mise en circulation est obligatoire.',
++            'date_mise_circulation.date'          => 'La date de mise en circulation n\'est pas valide.',
++            'date_mise_circulation.before_or_equal' => 'La date de mise en circulation ne peut pas être dans le futur.',
+             'kilometrage.min'          => 'Le kilométrage ne peut pas être négatif.',
+         ]);
+ 
+diff --git a/app/Models/User.php b/app/Models/User.php
+index 7a17304..d75acaa 100644
+--- a/app/Models/User.php
++++ b/app/Models/User.php
+@@ -36,6 +36,7 @@ class User extends Authenticatable
+         'email',
+         'password',
+         'role',
++        'locale',
+     ];
+ 
+     // Les champs sensibles ne sont jamais exposés dans les réponses JSON
+diff --git a/resources/views/auth/login.blade.php b/resources/views/auth/login.blade.php
+index 78c5f74..5723fe9 100644
+--- a/resources/views/auth/login.blade.php
++++ b/resources/views/auth/login.blade.php
+@@ -18,7 +18,10 @@
+ <div class="min-h-screen flex">
+ 
+     {{-- ════════ PANNEAU GAUCHE — BRANDING ════════ --}}
+-    <div class="hidden lg:flex lg:w-7/12 relative overflow-hidden flex-col items-center justify-center"
++    {{-- overflow-y-auto + my-auto sur le contenu : le bloc reste centré quand la
++         fenêtre est assez haute, et devient défilable sans chevauchement quand
++         elle est courte (le pied de page ne recouvre plus la liste). --}}
++    <div class="hidden lg:flex lg:w-7/12 relative overflow-y-auto overflow-x-hidden flex-col items-center py-12"
+          style="background: linear-gradient(145deg, #0f172a 0%, #1e293b 60%, #0c1525 100%);">
+ 
+         {{-- Engrenages en fond --}}
+@@ -38,7 +41,7 @@
+         </div>
+ 
+         {{-- Contenu centré --}}
+-        <div class="relative z-10 flex flex-col items-center text-center px-16 max-w-2xl">
++        <div class="relative z-10 flex flex-col items-center text-center px-16 max-w-2xl my-auto">
+ 
+             {{-- Logo --}}
+             <div class="mb-8" style="padding:12px;background:rgba(255,255,255,.06);border-radius:24px;border:1px solid rgba(249,115,22,.25);">
+@@ -86,8 +89,8 @@ class="h-28 w-28 object-contain rounded-2xl">
+ 
+         </div>
+ 
+-        {{-- Footer --}}
+-        <p class="absolute bottom-6 text-slate-600 text-sm">
++        {{-- Footer — en flux normal (plus en absolute) pour ne jamais recouvrir le contenu --}}
++        <p class="relative z-10 flex-shrink-0 mt-8 text-slate-500 text-sm text-center">
+             © {{ date('Y') }} STCD Motors — Tous droits réservés
+         </p>
+     </div>
+diff --git a/resources/views/devis/create.blade.php b/resources/views/devis/create.blade.php
+index bdddfa6..f84049e 100644
+--- a/resources/views/devis/create.blade.php
++++ b/resources/views/devis/create.blade.php
+@@ -58,7 +58,7 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-
+     <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+         <div>
+             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Détail des prestations</h3>
+-            <p class="text-xs text-slate-400 mt-0.5">Main d'œuvre → nombre d'heures &nbsp;|&nbsp; Pièce → quantité + référence</p>
++            <p class="text-xs text-slate-400 mt-0.5">Main d'œuvre → nombre d'heures &nbsp;|&nbsp; Pièce → quantité + référence &nbsp;|&nbsp; le prix des pièces est fourni automatiquement par le magasin</p>
+         </div>
+         <div class="flex gap-2">
+             <button type="button" onclick="ajouterLigne('main_oeuvre')"
+@@ -295,7 +295,8 @@ class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right f
+         </td>
+         <td class="px-3 py-3">
+             <input type="number" name="lignes[${i}][prix_unitaire]" value="0" min="0" step="0.01"
+-                   class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu"
++                   ${isPiece ? 'readonly title="Prix fourni automatiquement par le magasin"' : ''}
++                   class="w-full border rounded-lg px-2 py-1.5 text-xs text-right ligne-pu ${isPiece ? 'border-gray-100 bg-gray-50 text-slate-400 cursor-not-allowed' : 'border-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500'}"
+                    oninput="calculerLigne(this)">
+         </td>
+         <td class="px-3 py-3">
+@@ -320,6 +321,7 @@ function typeChanged(select) {
+     const row       = select.closest('tr');
+     const refInput  = row.querySelector('.ligne-ref');
+     const qtyInput  = row.querySelector('.ligne-qty');
++    const puInput   = row.querySelector('.ligne-pu');
+     const uniteSpan = row.querySelector('.ligne-unite');
+     const type      = select.value;
+ 
+@@ -330,6 +332,12 @@ function typeChanged(select) {
+         qtyInput.placeholder = 'Qté';
+         uniteSpan.textContent  = 'u';
+         uniteSpan.className    = 'ligne-unite text-xs font-bold text-orange-500 w-4 text-center';
++        // Le prix des pièces vient du magasin : champ verrouillé, remis à 0.
++        puInput.readOnly     = true;
++        puInput.title        = 'Prix fourni automatiquement par le magasin';
++        puInput.value        = 0;
++        puInput.className     = 'w-full border border-gray-100 bg-gray-50 rounded-lg px-2 py-1.5 text-xs text-right text-slate-400 cursor-not-allowed ligne-pu';
++        calculerLigne(puInput);
+     } else {
+         refInput.disabled    = true;
+         refInput.value       = '';
+@@ -338,6 +346,9 @@ function typeChanged(select) {
+         qtyInput.placeholder = 'Heures';
+         uniteSpan.textContent  = 'h';
+         uniteSpan.className    = 'ligne-unite text-xs font-bold text-blue-500 w-4 text-center';
++        puInput.readOnly     = false;
++        puInput.title        = '';
++        puInput.className     = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu';
+     }
+ 
+     const designationInput = row.querySelector('.ligne-designation');
+diff --git a/resources/views/devis/edit.blade.php b/resources/views/devis/edit.blade.php
+index a267e09..63199b6 100644
+--- a/resources/views/devis/edit.blade.php
++++ b/resources/views/devis/edit.blade.php
+@@ -57,7 +57,7 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-
+     <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+         <div>
+             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Détail des prestations</h3>
+-            <p class="text-xs text-slate-400 mt-0.5">Main d'œuvre → nombre d'heures &nbsp;|&nbsp; Pièce → quantité + référence</p>
++            <p class="text-xs text-slate-400 mt-0.5">Main d'œuvre → nombre d'heures &nbsp;|&nbsp; Pièce → quantité + référence &nbsp;|&nbsp; le prix des pièces est fourni automatiquement par le magasin</p>
+         </div>
+         <div class="flex gap-2">
+             <button type="button" onclick="ajouterLigne('main_oeuvre')"
+@@ -124,7 +124,8 @@ class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right f
+                     </td>
+                     <td class="px-3 py-3">
+                         <input type="number" name="lignes[{{ $i }}][prix_unitaire]" value="{{ $ligne->prix_unitaire }}" min="0" step="0.01"
+-                               class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu" oninput="calculerLigne(this)">
++                               @if($isPiece) readonly title="Prix fourni automatiquement par le magasin" @endif
++                               class="w-full border rounded-lg px-2 py-1.5 text-xs text-right ligne-pu {{ $isPiece ? 'border-gray-100 bg-gray-50 text-slate-400 cursor-not-allowed' : 'border-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500' }}" oninput="calculerLigne(this)">
+                     </td>
+                     <td class="px-3 py-3">
+                         <input type="number" name="lignes[{{ $i }}][remise]" value="{{ $ligne->remise }}" min="0" max="100" step="0.01"
+@@ -306,7 +307,8 @@ class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right f
+         </td>
+         <td class="px-3 py-3">
+             <input type="number" name="lignes[${i}][prix_unitaire]" value="0" min="0" step="0.01"
+-                   class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu"
++                   ${isPiece ? 'readonly title="Prix fourni automatiquement par le magasin"' : ''}
++                   class="w-full border rounded-lg px-2 py-1.5 text-xs text-right ligne-pu ${isPiece ? 'border-gray-100 bg-gray-50 text-slate-400 cursor-not-allowed' : 'border-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-500'}"
+                    oninput="calculerLigne(this)">
+         </td>
+         <td class="px-3 py-3">
+@@ -331,6 +333,7 @@ function typeChanged(select) {
+     const row       = select.closest('tr');
+     const refInput  = row.querySelector('.ligne-ref');
+     const qtyInput  = row.querySelector('.ligne-qty');
++    const puInput   = row.querySelector('.ligne-pu');
+     const uniteSpan = row.querySelector('.ligne-unite');
+     const type      = select.value;
+ 
+@@ -341,6 +344,12 @@ function typeChanged(select) {
+         qtyInput.placeholder = 'Qté';
+         uniteSpan.textContent = 'u';
+         uniteSpan.className   = 'ligne-unite text-xs font-bold text-orange-500 w-4 text-center';
++        // Le prix des pièces vient du magasin : champ verrouillé, remis à 0.
++        puInput.readOnly     = true;
++        puInput.title        = 'Prix fourni automatiquement par le magasin';
++        puInput.value        = 0;
++        puInput.className     = 'w-full border border-gray-100 bg-gray-50 rounded-lg px-2 py-1.5 text-xs text-right text-slate-400 cursor-not-allowed ligne-pu';
++        calculerLigne(puInput);
+     } else {
+         refInput.disabled    = true;
+         refInput.value       = '';
+@@ -349,6 +358,9 @@ function typeChanged(select) {
+         qtyInput.placeholder = 'Heures';
+         uniteSpan.textContent = 'h';
+         uniteSpan.className   = 'ligne-unite text-xs font-bold text-blue-500 w-4 text-center';
++        puInput.readOnly     = false;
++        puInput.title        = '';
++        puInput.className     = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-500 ligne-pu';
+     }
+ 
+     const designationInput = row.querySelector('.ligne-designation');
+diff --git a/resources/views/dossiers-reception/create.blade.php b/resources/views/dossiers-reception/create.blade.php
+index d7e8f13..384a950 100644
+--- a/resources/views/dossiers-reception/create.blade.php
++++ b/resources/views/dossiers-reception/create.blade.php
+@@ -737,6 +737,11 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-
+                         <input type="number" id="mv_annee" placeholder="{{ date('Y') }}" min="1950" max="{{ date('Y') + 1 }}"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                     </div>
++                    <div>
++                        <label class="block text-xs font-medium text-slate-600 mb-1">Date de mise en circulation <span class="text-red-500">*</span></label>
++                        <input type="date" id="mv_date_mise_circulation" max="{{ date('Y-m-d') }}"
++                               class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
++                    </div>
+                     <div>
+                         <label class="block text-xs font-medium text-slate-600 mb-1">Motorisation <span class="text-red-500">*</span></label>
+                         <select id="mv_motorisation"
+@@ -769,9 +774,11 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm bg-white focus
+                     </div>
+                 </div>
+                 <div>
+-                    <label class="block text-xs font-medium text-slate-600 mb-1">VIN / N° Châssis</label>
+-                    <input type="text" id="mv_vin" placeholder="VF1…"
++                    <label class="block text-xs font-medium text-slate-600 mb-1">VIN / N° Châssis <span class="text-red-500">*</span></label>
++                    <input type="text" id="mv_vin" placeholder="VF1…" maxlength="17" minlength="17"
++                           style="text-transform:uppercase"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500">
++                    <p class="text-xs text-slate-400 mt-1">Exactement 17 caractères alphanumériques (ni plus, ni moins).</p>
+                 </div>
+             </div>
+             <div class="px-6 pb-5 flex gap-3">
+@@ -1124,6 +1131,20 @@ function fermerModalVehicule() {
+     const errBox   = document.getElementById('modal_vehicule_error');
+     errBox.classList.add('hidden');
+ 
++    const vin = document.getElementById('mv_vin').value.trim().toUpperCase();
++    if (!/^[A-Z0-9]{17}$/.test(vin)) {
++        errBox.textContent = 'Le numéro de châssis (VIN) est obligatoire et doit contenir exactement 17 caractères alphanumériques (ni plus, ni moins).';
++        errBox.classList.remove('hidden');
++        return;
++    }
++
++    const dateMiseCirculation = document.getElementById('mv_date_mise_circulation').value;
++    if (!dateMiseCirculation) {
++        errBox.textContent = 'La date de mise en circulation est obligatoire.';
++        errBox.classList.remove('hidden');
++        return;
++    }
++
+     const body = {
+         client_id:       clientId,
+         immatriculation: document.getElementById('mv_immat').value.trim().toUpperCase(),
+@@ -1133,7 +1154,8 @@ function fermerModalVehicule() {
+         motorisation:    document.getElementById('mv_motorisation').value,
+         categorie:       document.getElementById('mv_categorie').value || null,
+         sous_garantie:   document.getElementById('mv_sous_garantie').value,
+-        vin:             document.getElementById('mv_vin').value.trim() || null,
++        vin:             vin,
++        date_mise_circulation: dateMiseCirculation,
+         kilometrage:     document.getElementById('mv_km').value || 0,
+     };
+ 
+@@ -1170,7 +1192,7 @@ function fermerModalVehicule() {
+         sel.value = data.id;
+         chargerInfoVehicule(sel);
+         fermerModalVehicule();
+-        ['mv_immat','mv_marque','mv_modele','mv_annee','mv_vin','mv_km'].forEach(id => {
++        ['mv_immat','mv_marque','mv_modele','mv_annee','mv_vin','mv_km','mv_date_mise_circulation'].forEach(id => {
+             const el = document.getElementById(id);
+             if (el) el.value = '';
+         });
+diff --git a/resources/views/layouts/app.blade.php b/resources/views/layouts/app.blade.php
+index 034b99c..436024c 100644
+--- a/resources/views/layouts/app.blade.php
++++ b/resources/views/layouts/app.blade.php
+@@ -352,13 +352,16 @@ class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transi
+         {{-- User info + Toggle + Logout --}}
+         <div class="border-t border-slate-700 px-4 py-4">
+             <div class="flex items-center gap-2">
+-                <div class="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+-                    {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
+-                </div>
+-                <div class="flex-1 min-w-0">
+-                    <p class="text-white text-sm font-medium truncate">{{ auth()->user()->name }}</p>
+-                    <p class="text-slate-400 text-xs truncate">{{ auth()->user()->getRoleLabel() }}</p>
+-                </div>
++                <a href="{{ route('profil.edit') }}" title="Mon profil"
++                   class="flex items-center gap-2 flex-1 min-w-0 rounded-lg px-1 py-1 -mx-1 hover:bg-slate-800 transition-colors {{ request()->routeIs('profil.*') ? 'bg-slate-800' : '' }}">
++                    <div class="w-9 h-9 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
++                        {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
++                    </div>
++                    <div class="flex-1 min-w-0">
++                        <p class="text-white text-sm font-medium truncate">{{ auth()->user()->name }}</p>
++                        <p class="text-slate-400 text-xs truncate">{{ auth()->user()->getRoleLabel() }}</p>
++                    </div>
++                </a>
+ 
+                 {{-- Bouton mode nuit/clair --}}
+                 <button id="btn-theme" onclick="toggleTheme()" title="Basculer mode nuit/clair"
+@@ -405,7 +408,7 @@ class="lg:hidden flex-shrink-0 p-2 -ml-2 rounded-lg text-slate-500 hover:bg-gray
+                     @endif
+                 </div>
+             </div>
+-            <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0 overflow-x-auto">
++            <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3 flex-shrink-0">
+ 
+                 {{-- Cloche de notifications --}}
+                 @php
+diff --git a/resources/views/ordres-reparations/create.blade.php b/resources/views/ordres-reparations/create.blade.php
+index 86907bc..efb1d75 100644
+--- a/resources/views/ordres-reparations/create.blade.php
++++ b/resources/views/ordres-reparations/create.blade.php
+@@ -714,6 +714,11 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-
+                         <input type="number" id="mv_annee" placeholder="{{ date('Y') }}" min="1950" max="{{ date('Y') + 1 }}"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
+                     </div>
++                    <div>
++                        <label class="block text-xs font-medium text-slate-600 mb-1">Date de mise en circulation <span class="text-red-500">*</span></label>
++                        <input type="date" id="mv_date_mise_circulation" max="{{ date('Y-m-d') }}"
++                               class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
++                    </div>
+                     <div>
+                         <label class="block text-xs font-medium text-slate-600 mb-1">Motorisation <span class="text-red-500">*</span></label>
+                         <select id="mv_motorisation"
+@@ -746,9 +751,11 @@ class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm bg-white focus
+                     </div>
+                 </div>
+                 <div>
+-                    <label class="block text-xs font-medium text-slate-600 mb-1">VIN / N° Châssis</label>
+-                    <input type="text" id="mv_vin" placeholder="VF1…"
++                    <label class="block text-xs font-medium text-slate-600 mb-1">VIN / N° Châssis <span class="text-red-500">*</span></label>
++                    <input type="text" id="mv_vin" placeholder="VF1…" maxlength="17" minlength="17"
++                           style="text-transform:uppercase"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500">
++                    <p class="text-xs text-slate-400 mt-1">Exactement 17 caractères alphanumériques (ni plus, ni moins).</p>
+                 </div>
+             </div>
+             <div class="px-6 pb-5 flex gap-3">
+@@ -1099,6 +1106,20 @@ function fermerModalVehicule() {
+     const errBox   = document.getElementById('modal_vehicule_error');
+     errBox.classList.add('hidden');
+ 
++    const vin = document.getElementById('mv_vin').value.trim().toUpperCase();
++    if (!/^[A-Z0-9]{17}$/.test(vin)) {
++        errBox.textContent = 'Le numéro de châssis (VIN) est obligatoire et doit contenir exactement 17 caractères alphanumériques (ni plus, ni moins).';
++        errBox.classList.remove('hidden');
++        return;
++    }
++
++    const dateMiseCirculation = document.getElementById('mv_date_mise_circulation').value;
++    if (!dateMiseCirculation) {
++        errBox.textContent = 'La date de mise en circulation est obligatoire.';
++        errBox.classList.remove('hidden');
++        return;
++    }
++
+     const body = {
+         client_id:       clientId,
+         immatriculation: document.getElementById('mv_immat').value.trim().toUpperCase(),
+@@ -1108,7 +1129,8 @@ function fermerModalVehicule() {
+         motorisation:    document.getElementById('mv_motorisation').value,
+         categorie:       document.getElementById('mv_categorie').value || null,
+         sous_garantie:   document.getElementById('mv_sous_garantie').value,
+-        vin:             document.getElementById('mv_vin').value.trim() || null,
++        vin:             vin,
++        date_mise_circulation: dateMiseCirculation,
+         kilometrage:     document.getElementById('mv_km').value || 0,
+     };
+ 
+@@ -1144,7 +1166,7 @@ function fermerModalVehicule() {
+         sel.value = data.id;
+         chargerInfoVehicule(sel);
+         fermerModalVehicule();
+-        ['mv_immat','mv_marque','mv_modele','mv_annee','mv_vin','mv_km'].forEach(id => {
++        ['mv_immat','mv_marque','mv_modele','mv_annee','mv_vin','mv_km','mv_date_mise_circulation'].forEach(id => {
+             const el = document.getElementById(id);
+             if (el) el.value = '';
+         });
+diff --git a/resources/views/ordres-reparations/show.blade.php b/resources/views/ordres-reparations/show.blade.php
+index 4de0c8e..383e2ca 100644
+--- a/resources/views/ordres-reparations/show.blade.php
++++ b/resources/views/ordres-reparations/show.blade.php
+@@ -274,12 +274,12 @@ class="flex-shrink-0 bg-white text-blue-700 hover:bg-blue-50 font-black text-bas
+                 <span class="text-xs text-slate-400 font-normal">({{ $or->allDevis->count() }})</span>
+                 @endif
+             </h3>
+-            @if(!$or->devis && $or->type !== 'garantie' && auth()->user()->canManageWorkshop())
++            @if(!$or->devis && $or->type !== 'garantie' && auth()->user()->hasPermission('gerer_devis'))
+             <a href="{{ route('devis.create', $or) }}"
+                class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                 + Créer un devis
+             </a>
+-            @elseif($or->devis && $or->devis->statut === 'accepte' && $or->type !== 'garantie' && auth()->user()->canManageWorkshop())
++            @elseif($or->devis && $or->devis->statut === 'accepte' && $or->type !== 'garantie' && auth()->user()->hasPermission('gerer_devis'))
+             <a href="{{ route('devis.create', $or) }}"
+                class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                 + Devis complémentaire
+diff --git a/resources/views/vehicules/_form.blade.php b/resources/views/vehicules/_form.blade.php
+index e9f4de4..caaeaf9 100644
+--- a/resources/views/vehicules/_form.blade.php
++++ b/resources/views/vehicules/_form.blade.php
+@@ -54,10 +54,13 @@
+                        class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 @error('immatriculation') border-red-400 @enderror">
+             </div>
+             <div>
+-                <label class="block text-sm font-medium text-slate-700 mb-1.5">N° Châssis (VIN)</label>
+-                <input type="text" name="vin" value="{{ old('vin', $vehicule?->vin) }}"
++                <label class="block text-sm font-medium text-slate-700 mb-1.5">N° Châssis (VIN) <span class="text-red-500">*</span></label>
++                <input type="text" name="vin" value="{{ old('vin', $vehicule?->vin) }}" required
++                       minlength="17" maxlength="17" pattern="[A-Za-z0-9]{17}"
++                       title="Le VIN doit contenir exactement 17 caractères alphanumériques (lettres et chiffres)."
+                        placeholder="VF7XXXXXXXXXXXXXXX" style="text-transform:uppercase"
+-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500">
++                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500 @error('vin') border-red-400 @enderror">
++                <p class="text-xs text-slate-400 mt-1">Exactement 17 caractères alphanumériques (ni plus, ni moins).</p>
+             </div>
+         </div>
+     </div>
+@@ -132,9 +135,10 @@ class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outlin
+                        class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 @error('kilometrage') border-red-400 @enderror">
+             </div>
+             <div>
+-                <label class="block text-sm font-medium text-slate-700 mb-1.5">Date de mise en circulation</label>
++                <label class="block text-sm font-medium text-slate-700 mb-1.5">Date de mise en circulation <span class="text-red-500">*</span></label>
+                 <input type="date" name="date_mise_circulation" value="{{ old('date_mise_circulation', $vehicule?->date_mise_circulation?->format('Y-m-d')) }}"
+-                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
++                       required max="{{ date('Y-m-d') }}"
++                       class="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 @error('date_mise_circulation') border-red-400 @enderror">
+             </div>
+         </div>
+     </div>
+diff --git a/routes/web.php b/routes/web.php
+index b7b41f9..b45f70f 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -17,6 +17,7 @@
+ use App\Http\Controllers\NotificationController;
+ use App\Http\Controllers\OrdreReparationController;
+ use App\Http\Controllers\PermissionController;
++use App\Http\Controllers\ProfilController;
+ use App\Http\Controllers\RapportController;
+ use App\Http\Controllers\ParametreAtelierController;
+ use App\Http\Controllers\RechercheController;
+@@ -52,6 +53,11 @@
+     Route::get('/notifications/{notification}/ouvrir', [NotificationController::class, 'ouvrir'])->name('notifications.ouvrir');
+     Route::post('/notifications/tout-marquer-lu', [NotificationController::class, 'toutMarquerLu'])->name('notifications.tout-marquer-lu');
+ 
++    // ── Profil personnel (tout compte connecté) ────────────────
++    Route::get('/profil',              [ProfilController::class, 'edit'])->name('profil.edit');
++    Route::patch('/profil/mot-de-passe', [ProfilController::class, 'updatePassword'])->name('profil.password');
++    Route::patch('/profil/langue',       [ProfilController::class, 'updateLangue'])->name('profil.langue');
++
+     // ── Clients ──────────────────────────────────────────────
+     // create doit être avant {client} pour éviter le conflit de route
+     Route::get('/clients/create',        [ClientController::class, 'create'])->name('clients.create')->middleware('perm:gerer_clients');
